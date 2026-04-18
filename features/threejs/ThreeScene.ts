@@ -214,12 +214,26 @@ export class ThreeScene {
       const geo = new THREE.PlaneGeometry(w, h, 1, 1)
       this.mainMesh = new THREE.Mesh(geo, this.makeFrontMaterial())
     } else {
-      // BoxGeometry: material order [+x, -x, +y, -y, +z(front), -z(back)]
-      const geo = new THREE.BoxGeometry(w, h, d)
-      const edgeCol = new THREE.Color(0x18181F)
-      const sideMat = new THREE.MeshPhysicalMaterial({ color: edgeCol, roughness: 0.85 })
-      const backMat = new THREE.MeshPhysicalMaterial({ color: edgeCol, roughness: 0.9 })
-      this.mainMesh = new THREE.Mesh(geo, [sideMat, sideMat, sideMat, sideMat, this.makeFrontMaterial(), backMat])
+      // Two planes sharing the same alpha texture — depth respects PNG transparency.
+      // Front face: offset forward by d/2
+      const frontGeo = new THREE.PlaneGeometry(w, h, 1, 1)
+      this.mainMesh = new THREE.Mesh(frontGeo, this.makeFrontMaterial())
+      this.mainMesh.position.z = d / 2
+
+      // Back face: same texture for alpha clipping, dark fill, faces backward
+      const backGeo = new THREE.PlaneGeometry(w, h, 1, 1)
+      const backMat = new THREE.MeshStandardMaterial({
+        map: this.currentTexture!,
+        alphaTest: 0.05,
+        transparent: true,
+        color: new THREE.Color(0x0C0C12),
+        roughness: 0.9,
+        side: THREE.BackSide
+      })
+      const backMesh = new THREE.Mesh(backGeo, backMat)
+      backMesh.position.z = -d / 2
+      backMesh.receiveShadow = true
+      this.meshGroup.add(backMesh)
     }
 
     this.mainMesh.receiveShadow = true
@@ -260,9 +274,7 @@ export class ThreeScene {
 
   private getFrontMat(): THREE.MeshPhysicalMaterial | null {
     if (!this.mainMesh) return null
-    const mat = this.mainMesh.material
-    if (Array.isArray(mat)) return mat[4] as THREE.MeshPhysicalMaterial
-    return mat as THREE.MeshPhysicalMaterial
+    return this.mainMesh.material as THREE.MeshPhysicalMaterial
   }
 
   private applyMaterialParamsToMesh(p: MaterialParams): void {
