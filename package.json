@@ -4,10 +4,10 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "nuxt build",
-    "dev": "nuxt dev",
-    "generate": "nuxt generate",
-    "preview": "nuxt preview"
+    "build": "node node_modules/nuxt/bin/nuxt.mjs build",
+    "dev": "node node_modules/nuxt/bin/nuxt.mjs dev",
+    "generate": "node node_modules/nuxt/bin/nuxt.mjs generate",
+    "preview": "node node_modules/nuxt/bin/nuxt.mjs preview"
   },
   "devDependencies": {
     "@nuxtjs/tailwindcss": "^6.12.0",
