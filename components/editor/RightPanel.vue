@@ -2,20 +2,33 @@
   <aside class="right-panel">
     <div class="panel-content">
 
-      <!-- ─── TRANSFORM ──────────────────────────────────── -->
-      <PanelSection title="Transform" icon="transform">
+      <!-- ─── GEOMETRY ──────────────────────────────────────── -->
+      <PanelSection title="Geometry" icon="geometry" :open="true">
+        <div class="space-y-3">
+          <UiSlider
+            label="Thickness"
+            :model-value="sceneStore.thickness"
+            :min="0" :max="0.6" :step="0.01" :decimals="2"
+            @update:model-value="sceneStore.setThickness($event)"
+          />
+          <p class="hint-text">Adds depth/extrusion to the image</p>
+        </div>
+      </PanelSection>
+
+      <UiSeparator />
+
+      <!-- ─── TRANSFORM ──────────────────────────────────────── -->
+      <PanelSection title="Transform" icon="transform" :open="true">
         <div class="space-y-3">
           <div class="subsection-label">Position</div>
           <UiSlider label="X" :model-value="sceneStore.position.x" :min="-5" :max="5" :step="0.01" :decimals="2" @update:model-value="sceneStore.setPosition('x', $event)" />
           <UiSlider label="Y" :model-value="sceneStore.position.y" :min="-5" :max="5" :step="0.01" :decimals="2" @update:model-value="sceneStore.setPosition('y', $event)" />
           <UiSlider label="Z" :model-value="sceneStore.position.z" :min="-5" :max="5" :step="0.01" :decimals="2" @update:model-value="sceneStore.setPosition('z', $event)" />
-
           <UiSeparator class="!my-2" />
-          <div class="subsection-label">Rotation (deg)</div>
+          <div class="subsection-label">Rotation (rad)</div>
           <UiSlider label="X" :model-value="sceneStore.rotation.x" :min="-3.14159" :max="3.14159" :step="0.01" :decimals="1" unit="°" @update:model-value="sceneStore.setRotation('x', $event)" />
           <UiSlider label="Y" :model-value="sceneStore.rotation.y" :min="-3.14159" :max="3.14159" :step="0.01" :decimals="1" unit="°" @update:model-value="sceneStore.setRotation('y', $event)" />
           <UiSlider label="Z" :model-value="sceneStore.rotation.z" :min="-3.14159" :max="3.14159" :step="0.01" :decimals="1" unit="°" @update:model-value="sceneStore.setRotation('z', $event)" />
-
           <UiSeparator class="!my-2" />
           <UiSlider label="Scale" :model-value="sceneStore.scale" :min="0.1" :max="3" :step="0.01" :decimals="2" @update:model-value="sceneStore.setScale($event)" />
         </div>
@@ -23,64 +36,170 @@
 
       <UiSeparator />
 
-      <!-- ─── ANIMATION ─────────────────────────────────── -->
-      <PanelSection title="Animation" icon="animation">
+      <!-- ─── MATERIAL ──────────────────────────────────────── -->
+      <PanelSection title="Material" icon="material" :open="true">
         <div class="space-y-3">
+
+          <!-- Presets -->
+          <div class="subsection-label">Presets</div>
+          <div class="preset-chips">
+            <button
+              v-for="p in materialPresets"
+              :key="p.id"
+              class="preset-chip"
+              :class="{ active: sceneStore.materialPreset === p.id }"
+              @click="sceneStore.applyMaterialPreset(p.id)"
+            >
+              {{ p.label }}
+            </button>
+          </div>
+
+          <UiSeparator class="!my-2" />
+
+          <!-- Color tint -->
           <div class="flex items-center justify-between">
-            <div class="flex items-center gap-1.5">
-              <svg width="11" height="11" viewBox="0 0 16 16" fill="none" class="text-accent">
-                <path d="M14 8C14 11.314 11.314 14 8 14C4.686 14 2 11.314 2 8C2 4.686 4.686 2 8 2" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-                <path d="M8 2L12 2L12 6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
-              </svg>
-              <span class="text-xs text-text-secondary">Auto Rotate</span>
-            </div>
-            <label class="toggle-switch cursor-pointer" @click.prevent="sceneStore.setAutoRotate(!sceneStore.autoRotate)">
-              <div class="toggle-track" :class="{ active: sceneStore.autoRotate }">
-                <div class="toggle-thumb" :class="{ active: sceneStore.autoRotate }" />
-              </div>
+            <span class="text-xs text-text-muted">Color Tint</span>
+            <label class="color-swatch-label">
+              <div class="color-preview" :style="{ background: sceneStore.colorTint }" />
+              <input type="color" :value="sceneStore.colorTint" class="color-picker-hidden"
+                @input="sceneStore.setColorTint(($event.target as HTMLInputElement).value)" />
             </label>
           </div>
 
-          <UiSlider
-            v-if="sceneStore.autoRotate"
+          <UiSlider label="Metalness"    :model-value="sceneStore.metalness"    :min="0" :max="1" :step="0.01" :decimals="2" @update:model-value="sceneStore.setMetalness($event)" />
+          <UiSlider label="Roughness"    :model-value="sceneStore.roughness"    :min="0" :max="1" :step="0.01" :decimals="2" @update:model-value="sceneStore.setRoughness($event)" />
+          <UiSlider label="Reflectivity" :model-value="sceneStore.reflectivity" :min="0" :max="1" :step="0.01" :decimals="2" @update:model-value="sceneStore.setReflectivity($event)" />
+          <UiSlider label="Opacity"      :model-value="sceneStore.opacity"      :min="0" :max="1" :step="0.01" :decimals="2" @update:model-value="sceneStore.setOpacity($event)" />
+
+          <UiSeparator class="!my-2" />
+          <ToggleRow label="Wireframe" :value="sceneStore.wireframe" @toggle="sceneStore.setWireframe(!sceneStore.wireframe)" />
+        </div>
+      </PanelSection>
+
+      <UiSeparator />
+
+      <!-- ─── STROKE ────────────────────────────────────────── -->
+      <PanelSection title="Stroke" icon="stroke" :open="false">
+        <div class="space-y-3">
+          <ToggleRow label="Enable Outline" :value="sceneStore.outlineEnabled" @toggle="sceneStore.setOutlineEnabled(!sceneStore.outlineEnabled)" />
+
+          <template v-if="sceneStore.outlineEnabled">
+            <div class="flex items-center justify-between">
+              <span class="text-xs text-text-muted">Stroke Color</span>
+              <label class="color-swatch-label">
+                <div class="color-preview" :style="{ background: sceneStore.outlineColor }" />
+                <input type="color" :value="sceneStore.outlineColor" class="color-picker-hidden"
+                  @input="sceneStore.setOutlineColor(($event.target as HTMLInputElement).value)" />
+              </label>
+            </div>
+            <UiSlider
+              label="Thickness"
+              :model-value="sceneStore.outlineThickness"
+              :min="0.01" :max="0.2" :step="0.005" :decimals="3"
+              @update:model-value="sceneStore.setOutlineThickness($event)"
+            />
+          </template>
+        </div>
+      </PanelSection>
+
+      <UiSeparator />
+
+      <!-- ─── EFFECTS ───────────────────────────────────────── -->
+      <PanelSection title="Effects" icon="effects" :open="false">
+        <div class="space-y-4">
+
+          <!-- Fire -->
+          <div class="effect-block">
+            <div class="effect-header">
+              <div class="flex items-center gap-2">
+                <span class="effect-emoji">🔥</span>
+                <span class="text-xs text-text-secondary font-medium">Fire</span>
+              </div>
+              <ToggleRow :value="sceneStore.fireEnabled" @toggle="sceneStore.setFireEnabled(!sceneStore.fireEnabled)" inline />
+            </div>
+            <UiSlider v-if="sceneStore.fireEnabled"
+              label="Intensity"
+              :model-value="sceneStore.fireIntensity"
+              :min="0.1" :max="1" :step="0.05" :decimals="2"
+              @update:model-value="sceneStore.setFireIntensity($event)"
+            />
+          </div>
+
+          <!-- Water -->
+          <div class="effect-block">
+            <div class="effect-header">
+              <div class="flex items-center gap-2">
+                <span class="effect-emoji">🌊</span>
+                <span class="text-xs text-text-secondary font-medium">Water</span>
+              </div>
+              <ToggleRow :value="sceneStore.waterEnabled" @toggle="sceneStore.setWaterEnabled(!sceneStore.waterEnabled)" inline />
+            </div>
+            <UiSlider v-if="sceneStore.waterEnabled"
+              label="Intensity"
+              :model-value="sceneStore.waterIntensity"
+              :min="0.1" :max="1" :step="0.05" :decimals="2"
+              @update:model-value="sceneStore.setWaterIntensity($event)"
+            />
+          </div>
+
+          <!-- Wind -->
+          <div class="effect-block">
+            <div class="effect-header">
+              <div class="flex items-center gap-2">
+                <span class="effect-emoji">🌬</span>
+                <span class="text-xs text-text-secondary font-medium">Wind</span>
+              </div>
+              <ToggleRow :value="sceneStore.windEnabled" @toggle="sceneStore.setWindEnabled(!sceneStore.windEnabled)" inline />
+            </div>
+            <UiSlider v-if="sceneStore.windEnabled"
+              label="Intensity"
+              :model-value="sceneStore.windIntensity"
+              :min="0.1" :max="1" :step="0.05" :decimals="2"
+              @update:model-value="sceneStore.setWindIntensity($event)"
+            />
+          </div>
+
+        </div>
+      </PanelSection>
+
+      <UiSeparator />
+
+      <!-- ─── ANIMATION ─────────────────────────────────────── -->
+      <PanelSection title="Animation" icon="animation" :open="false">
+        <div class="space-y-3">
+
+          <ToggleRow label="Auto Rotate" :value="sceneStore.autoRotate" @toggle="sceneStore.setAutoRotate(!sceneStore.autoRotate)" />
+          <UiSlider v-if="sceneStore.autoRotate"
             label="Speed"
             :model-value="sceneStore.autoRotateSpeed"
             :min="0.1" :max="5" :step="0.1" :decimals="1"
             @update:model-value="sceneStore.setAutoRotateSpeed($event)"
           />
-        </div>
-      </PanelSection>
-
-      <UiSeparator />
-
-      <!-- ─── MATERIAL ───────────────────────────────────── -->
-      <PanelSection title="Material" icon="material">
-        <div class="space-y-3">
-          <UiSlider label="Metalness" :model-value="sceneStore.metalness" :min="0" :max="1" :step="0.01" :decimals="2" @update:model-value="sceneStore.setMetalness($event)" />
-          <UiSlider label="Roughness" :model-value="sceneStore.roughness" :min="0" :max="1" :step="0.01" :decimals="2" @update:model-value="sceneStore.setRoughness($event)" />
-          <UiSlider label="Opacity" :model-value="sceneStore.opacity" :min="0" :max="1" :step="0.01" :decimals="2" @update:model-value="sceneStore.setOpacity($event)" />
 
           <UiSeparator class="!my-2" />
 
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-text-muted select-none">Wireframe</span>
-            <label class="toggle-switch cursor-pointer" @click.prevent="sceneStore.setWireframe(!sceneStore.wireframe)">
-              <div class="toggle-track" :class="{ active: sceneStore.wireframe }">
-                <div class="toggle-thumb" :class="{ active: sceneStore.wireframe }" />
-              </div>
-            </label>
-          </div>
+          <ToggleRow label="Float" :value="sceneStore.floatEnabled" @toggle="sceneStore.setFloatEnabled(!sceneStore.floatEnabled)" />
+          <UiSlider v-if="sceneStore.floatEnabled"
+            label="Intensity"
+            :model-value="sceneStore.floatIntensity"
+            :min="0.1" :max="2" :step="0.1" :decimals="1"
+            @update:model-value="sceneStore.setFloatIntensity($event)"
+          />
+
+          <UiSeparator class="!my-2" />
+
+          <ToggleRow label="Hover Reaction" :value="sceneStore.hoverEnabled" @toggle="sceneStore.setHoverEnabled(!sceneStore.hoverEnabled)" />
+          <p v-if="sceneStore.hoverEnabled" class="hint-text">Object tilts toward cursor</p>
         </div>
       </PanelSection>
 
       <UiSeparator />
 
-      <!-- ─── LIGHTING ───────────────────────────────────── -->
-      <PanelSection title="Lighting" icon="lighting">
+      <!-- ─── LIGHTING ──────────────────────────────────────── -->
+      <PanelSection title="Lighting" icon="lighting" :open="false">
         <div class="space-y-3">
-          <UiSlider label="Ambient" :model-value="sceneStore.ambientIntensity" :min="0" :max="2" :step="0.01" :decimals="2" @update:model-value="sceneStore.setAmbientIntensity($event)" />
+          <UiSlider label="Ambient"     :model-value="sceneStore.ambientIntensity"     :min="0" :max="2" :step="0.01" :decimals="2" @update:model-value="sceneStore.setAmbientIntensity($event)" />
           <UiSlider label="Directional" :model-value="sceneStore.directionalIntensity" :min="0" :max="3" :step="0.01" :decimals="2" @update:model-value="sceneStore.setDirectionalIntensity($event)" />
-
           <UiSeparator class="!my-2" />
           <div class="subsection-label">Light Position</div>
           <UiSlider label="X" :model-value="sceneStore.lightPosition.x" :min="-10" :max="10" :step="0.1" :decimals="1" @update:model-value="sceneStore.setLightPosition('x', $event)" />
@@ -91,30 +210,23 @@
 
       <UiSeparator />
 
-      <!-- ─── SCENE ──────────────────────────────────────── -->
-      <PanelSection title="Scene" icon="scene">
+      <!-- ─── SCENE ──────────────────────────────────────────── -->
+      <PanelSection title="Scene" icon="scene" :open="false">
         <div class="space-y-3">
           <div class="flex items-center justify-between">
             <span class="text-xs text-text-muted">Background</span>
             <label class="color-swatch-label">
               <div class="color-preview" :style="{ background: sceneStore.bgColor }" />
-              <input
-                type="color"
-                :value="sceneStore.bgColor"
-                class="color-picker-hidden"
-                @input="sceneStore.setBgColor(($event.target as HTMLInputElement).value)"
-              />
+              <input type="color" :value="sceneStore.bgColor" class="color-picker-hidden"
+                @input="sceneStore.setBgColor(($event.target as HTMLInputElement).value)" />
             </label>
           </div>
-
           <div class="bg-presets">
-            <button
-              v-for="preset in bgPresets"
-              :key="preset"
+            <button v-for="p in bgPresets" :key="p"
               class="bg-preset-btn"
-              :style="{ background: preset }"
-              :class="{ 'ring-1 ring-accent/60': sceneStore.bgColor === preset }"
-              @click="sceneStore.setBgColor(preset)"
+              :style="{ background: p }"
+              :class="{ 'ring-1 ring-accent/60': sceneStore.bgColor === p }"
+              @click="sceneStore.setBgColor(p)"
             />
           </div>
         </div>
@@ -122,31 +234,19 @@
 
       <UiSeparator />
 
-      <!-- ─── CAMERA ─────────────────────────────────────── -->
-      <PanelSection title="Camera" icon="camera">
+      <!-- ─── CAMERA ────────────────────────────────────────── -->
+      <PanelSection title="Camera" icon="camera" :open="false">
         <div class="space-y-3">
           <UiSlider label="Field of View" :model-value="sceneStore.fov" :min="30" :max="120" :step="1" :decimals="0" unit="°" @update:model-value="sceneStore.setFov($event)" />
-
           <UiSeparator class="!my-2" />
-
           <div class="camera-pos-display">
             <span class="text-xs text-text-muted">Camera</span>
             <div class="flex gap-2 mt-1">
-              <div class="coord-chip">
-                <span class="coord-axis x">X</span>
-                <span class="coord-val">{{ fmt(sceneStore.cameraPosition.x) }}</span>
-              </div>
-              <div class="coord-chip">
-                <span class="coord-axis y">Y</span>
-                <span class="coord-val">{{ fmt(sceneStore.cameraPosition.y) }}</span>
-              </div>
-              <div class="coord-chip">
-                <span class="coord-axis z">Z</span>
-                <span class="coord-val">{{ fmt(sceneStore.cameraPosition.z) }}</span>
-              </div>
+              <div class="coord-chip"><span class="coord-axis x">X</span><span class="coord-val">{{ fmt(sceneStore.cameraPosition.x) }}</span></div>
+              <div class="coord-chip"><span class="coord-axis y">Y</span><span class="coord-val">{{ fmt(sceneStore.cameraPosition.y) }}</span></div>
+              <div class="coord-chip"><span class="coord-axis z">Z</span><span class="coord-val">{{ fmt(sceneStore.cameraPosition.z) }}</span></div>
             </div>
           </div>
-
           <UiButton variant="outline" size="sm" class="w-full justify-center mt-1" @click="emit('resetCamera')">
             <template #icon>
               <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
@@ -169,33 +269,70 @@ import { useSceneStore } from '~/stores/sceneStore'
 const emit = defineEmits<{ resetCamera: [] }>()
 const sceneStore = useSceneStore()
 
+const materialPresets = [
+  { id: 'plastic', label: 'Plastic' },
+  { id: 'metal',   label: 'Metal'   },
+  { id: 'glass',   label: 'Glass'   },
+  { id: 'matte',   label: 'Matte'   },
+  { id: 'glossy',  label: 'Glossy'  }
+]
+
 const bgPresets = ['#0A0A0F', '#FFFFFF', '#F5F5F0', '#1A1A2E', '#0D1B2A', '#2D1B3D']
 
-function fmt(v: number): string {
-  return v.toFixed(1)
-}
+function fmt(v: number): string { return v.toFixed(1) }
 </script>
 
-<!-- Panel section sub-component (defined inline) -->
+<!-- ─── Inline sub-components ───────────────────────────── -->
 <script lang="ts">
 import { defineComponent, h, ref } from 'vue'
 
+// ToggleRow — reusable toggle with optional inline layout
+export const ToggleRow = defineComponent({
+  name: 'ToggleRow',
+  props: {
+    label: { type: String, default: '' },
+    value: { type: Boolean, required: true },
+    inline: { type: Boolean, default: false }
+  },
+  emits: ['toggle'],
+  setup(props, { emit }) {
+    const track = () => h('div', {
+      class: ['toggle-track', props.value ? 'active' : ''],
+    }, [h('div', { class: ['toggle-thumb', props.value ? 'active' : ''] })])
+
+    return () => h('div', {
+      class: props.inline ? '' : 'flex items-center justify-between'
+    }, [
+      props.label ? h('span', { class: 'text-xs text-text-secondary select-none' }, props.label) : null,
+      h('label', {
+        class: 'toggle-switch cursor-pointer',
+        onClick: (e: Event) => { e.preventDefault(); emit('toggle') }
+      }, [track()])
+    ])
+  }
+})
+
+// PanelSection — collapsible section with open prop
 export const PanelSection = defineComponent({
   name: 'PanelSection',
   props: {
-    title: { type: String, required: true },
-    icon: { type: String, default: '' }
+    title:  { type: String,  required: true },
+    icon:   { type: String,  default: '' },
+    open:   { type: Boolean, default: true }
   },
   setup(props, { slots }) {
-    const isOpen = ref(true)
+    const isOpen = ref(props.open)
 
     const iconPaths: Record<string, string> = {
+      geometry:  'M8 2L14 5V11L8 14L2 11V5L8 2Z',
       transform: 'M8 1L14 4V12L8 15L2 12V4L8 1Z',
+      material:  'M2 6h12M2 10h12M6 2v12M10 2v12',
+      stroke:    'M3 13L13 3M3 3l10 10',
+      effects:   'M8 1l1.5 4.5H14L10 8.5l1.5 4.5L8 10.5 4.5 13 6 8.5 2 5.5h4.5L8 1Z',
       animation: 'M14 8C14 11.314 11.314 14 8 14C4.686 14 2 11.314 2 8C2 4.686 4.686 2 8 2M8 2L12 2L12 6',
-      material: 'M2 6h12M2 10h12M6 2v12M10 2v12',
-      lighting: 'M8 2a5 5 0 0 1 5 5c0 2.5-1.5 4.5-4 5.4V14H7v-1.6C4.5 11.5 3 9.5 3 7a5 5 0 0 1 5-5z',
-      scene: 'M2 12L8 4L14 12H2Z',
-      camera: 'M2 5h3l2-2h6l2 2h1v8H2V5z M8 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'
+      lighting:  'M8 2a5 5 0 0 1 5 5c0 2.5-1.5 4.5-4 5.4V14H7v-1.6C4.5 11.5 3 9.5 3 7a5 5 0 0 1 5-5z',
+      scene:     'M2 12L8 4L14 12H2Z',
+      camera:    'M2 5h3l2-2h6l2 2h1v8H2V5z M8 11a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5z'
     }
 
     return () => h('div', { class: 'panel-section-wrapper' }, [
@@ -272,35 +409,43 @@ export const PanelSection = defineComponent({
   letter-spacing: 0.08em;
 }
 
-.camera-pos-display { padding: 8px 0; }
+.hint-text {
+  font-size: 10px;
+  color: #3D3D52;
+  line-height: 1.4;
+}
 
-.coord-chip {
+/* ── Material presets ─── */
+.preset-chips {
   display: flex;
-  align-items: center;
   gap: 4px;
+  flex-wrap: wrap;
+}
+
+.preset-chip {
+  padding: 3px 10px;
+  font-size: 11px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 6px;
-  padding: 3px 6px;
-  flex: 1;
+  color: #6B6B8A;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
 }
 
-.coord-axis {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-}
-
-.coord-axis.x { color: #FF6B6B; }
-.coord-axis.y { color: #22C55E; }
-.coord-axis.z { color: #6C63FF; }
-
-.coord-val {
-  font-family: 'JetBrains Mono', 'Fira Code', monospace;
-  font-size: 10px;
+.preset-chip:hover {
+  border-color: rgba(108, 99, 255, 0.3);
   color: #B0B0CC;
 }
 
+.preset-chip.active {
+  background: rgba(108, 99, 255, 0.18);
+  border-color: rgba(108, 99, 255, 0.5);
+  color: #8B5CF6;
+}
+
+/* ── Color picker ─── */
 .color-swatch-label {
   position: relative;
   cursor: pointer;
@@ -329,6 +474,52 @@ export const PanelSection = defineComponent({
   padding: 0;
 }
 
+/* ── Effects ─── */
+.effect-block {
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.effect-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.effect-emoji {
+  font-size: 14px;
+  line-height: 1;
+}
+
+/* ── Camera ─── */
+.camera-pos-display { padding: 8px 0; }
+
+.coord-chip {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  padding: 3px 6px;
+  flex: 1;
+}
+
+.coord-axis { font-size: 10px; font-weight: 700; letter-spacing: 0.05em; }
+.coord-axis.x { color: #FF6B6B; }
+.coord-axis.y { color: #22C55E; }
+.coord-axis.z { color: #6C63FF; }
+
+.coord-val {
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 10px;
+  color: #B0B0CC;
+}
+
+/* ── Scene presets ─── */
 .bg-presets {
   display: flex;
   gap: 6px;
@@ -344,7 +535,5 @@ export const PanelSection = defineComponent({
   transition: transform 0.1s ease;
 }
 
-.bg-preset-btn:hover {
-  transform: scale(1.15);
-}
+.bg-preset-btn:hover { transform: scale(1.15); }
 </style>

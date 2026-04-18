@@ -26,7 +26,6 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
 
   async function initScene() {
     if (!canvasRef.value) return
-
     await loadDeps()
     if (!ThreeSceneClass) return
 
@@ -41,6 +40,7 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     })
     threeScene.updateCamera(sceneStore.fov)
     threeScene.setAutoRotate(sceneStore.autoRotate, sceneStore.autoRotateSpeed)
+    threeScene.setHoverEnabled(sceneStore.hoverEnabled)
     threeScene.updateBgColor(sceneStore.bgColor)
 
     startCameraPolling()
@@ -65,12 +65,15 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
 
     await threeScene.loadTexture(url)
 
-    const mesh = threeScene.getMesh()
-    if (mesh && gsapLib) {
+    // Apply any pending thickness before GSAP entrance
+    threeScene.updateThickness(sceneStore.thickness)
+
+    const group = threeScene.getMeshGroup()
+    if (group && gsapLib) {
       gsapLib.fromTo(
-        mesh.scale,
+        group.scale,
         { x: 0, y: 0, z: 0 },
-        { x: 1, y: 1, z: 1, duration: 0.6, ease: 'back.out(1.7)' }
+        { x: sceneStore.scale, y: sceneStore.scale, z: sceneStore.scale, duration: 0.6, ease: 'back.out(1.7)' }
       )
     }
 
@@ -78,7 +81,22 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
       metalness: sceneStore.metalness,
       roughness: sceneStore.roughness,
       opacity: sceneStore.opacity,
-      wireframe: sceneStore.wireframe
+      wireframe: sceneStore.wireframe,
+      colorTint: sceneStore.colorTint,
+      reflectivity: sceneStore.reflectivity
+    })
+
+    threeScene.updateOutline({
+      enabled: sceneStore.outlineEnabled,
+      color: sceneStore.outlineColor,
+      thickness: sceneStore.outlineThickness
+    })
+
+    threeScene.setEffects({
+      fire:  { enabled: sceneStore.fireEnabled,  intensity: sceneStore.fireIntensity  },
+      water: { enabled: sceneStore.waterEnabled, intensity: sceneStore.waterIntensity },
+      wind:  { enabled: sceneStore.windEnabled,  intensity: sceneStore.windIntensity  },
+      float: { enabled: sceneStore.floatEnabled, intensity: sceneStore.floatIntensity }
     })
   }
 
@@ -89,7 +107,9 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
       metalness: sceneStore.metalness,
       roughness: sceneStore.roughness,
       opacity: sceneStore.opacity,
-      wireframe: sceneStore.wireframe
+      wireframe: sceneStore.wireframe,
+      colorTint: sceneStore.colorTint,
+      reflectivity: sceneStore.reflectivity
     })
 
     threeScene.updateTransform({
@@ -106,78 +126,76 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
 
     threeScene.updateCamera(sceneStore.fov)
     threeScene.setAutoRotate(sceneStore.autoRotate, sceneStore.autoRotateSpeed)
+    threeScene.setHoverEnabled(sceneStore.hoverEnabled)
     threeScene.updateBgColor(sceneStore.bgColor)
+    threeScene.updateThickness(sceneStore.thickness)
+
+    threeScene.updateOutline({
+      enabled: sceneStore.outlineEnabled,
+      color: sceneStore.outlineColor,
+      thickness: sceneStore.outlineThickness
+    })
+
+    threeScene.setEffects({
+      fire:  { enabled: sceneStore.fireEnabled,  intensity: sceneStore.fireIntensity  },
+      water: { enabled: sceneStore.waterEnabled, intensity: sceneStore.waterIntensity },
+      wind:  { enabled: sceneStore.windEnabled,  intensity: sceneStore.windIntensity  },
+      float: { enabled: sceneStore.floatEnabled, intensity: sceneStore.floatIntensity }
+    })
   }
 
-  function resetCamera() {
-    threeScene?.resetCamera()
-  }
-
-  function zoomIn() { threeScene?.zoomIn() }
+  function resetCamera() { threeScene?.resetCamera() }
+  function zoomIn()  { threeScene?.zoomIn()  }
   function zoomOut() { threeScene?.zoomOut() }
-  function handleMouseDown(e: MouseEvent) { threeScene?.handleMouseDown(e) }
-  function handleMouseMove(e: MouseEvent) { threeScene?.handleMouseMove(e) }
-  function handleMouseUp() { threeScene?.handleMouseUp() }
-  function handleWheel(e: WheelEvent) { threeScene?.handleWheel(e) }
-  function resize(w: number, h: number) { threeScene?.resize(w, h) }
+
+  function handleMouseDown(e: MouseEvent)  { threeScene?.handleMouseDown(e) }
+  function handleMouseMove(e: MouseEvent)  { threeScene?.handleMouseMove(e) }
+  function handleMouseUp()                 { threeScene?.handleMouseUp()    }
+  function handleMouseLeave()              { threeScene?.handleMouseLeave() }
+  function handleWheel(e: WheelEvent)      { threeScene?.handleWheel(e)     }
+  function resize(w: number, h: number)    { threeScene?.resize(w, h)       }
 
   function dispose() {
-    if (cameraPollingId !== null) {
-      cancelAnimationFrame(cameraPollingId)
-      cameraPollingId = null
-    }
+    if (cameraPollingId !== null) { cancelAnimationFrame(cameraPollingId); cameraPollingId = null }
     threeScene?.dispose()
     threeScene = null
     isReady.value = false
   }
 
+  // Watch all scene state — one watcher is fine at this scale
   watch(
     () => [
-      sceneStore.position,
-      sceneStore.rotation,
-      sceneStore.scale,
-      sceneStore.metalness,
-      sceneStore.roughness,
-      sceneStore.opacity,
-      sceneStore.wireframe,
-      sceneStore.ambientIntensity,
-      sceneStore.directionalIntensity,
-      sceneStore.lightPosition,
+      sceneStore.position, sceneStore.rotation, sceneStore.scale,
+      sceneStore.metalness, sceneStore.roughness, sceneStore.opacity, sceneStore.wireframe,
+      sceneStore.colorTint, sceneStore.reflectivity, sceneStore.materialPreset,
+      sceneStore.thickness,
+      sceneStore.outlineEnabled, sceneStore.outlineColor, sceneStore.outlineThickness,
+      sceneStore.ambientIntensity, sceneStore.directionalIntensity, sceneStore.lightPosition,
       sceneStore.fov,
-      sceneStore.autoRotate,
-      sceneStore.autoRotateSpeed,
+      sceneStore.autoRotate, sceneStore.autoRotateSpeed,
+      sceneStore.floatEnabled, sceneStore.floatIntensity, sceneStore.hoverEnabled,
+      sceneStore.fireEnabled, sceneStore.fireIntensity,
+      sceneStore.waterEnabled, sceneStore.waterIntensity,
+      sceneStore.windEnabled, sceneStore.windIntensity,
       sceneStore.bgColor
     ],
     () => { if (isReady.value) updateScene() },
     { deep: true }
   )
 
-  // Watch the active image URL (processed or original)
   watch(
     () => editorStore.activeImageUrl,
-    async (url) => {
-      if (url && isReady.value) {
-        await loadTexture(url)
-      }
-    }
+    async (url) => { if (url && isReady.value) await loadTexture(url) }
   )
 
   onMounted(async () => { await initScene() })
   onUnmounted(() => { dispose() })
 
   return {
-    isReady,
-    cameraPos,
-    loadTexture,
-    updateScene,
-    resetCamera,
-    zoomIn,
-    zoomOut,
-    handleMouseDown,
-    handleMouseMove,
-    handleMouseUp,
-    handleWheel,
-    resize,
-    dispose
+    isReady, cameraPos,
+    loadTexture, updateScene, resetCamera,
+    zoomIn, zoomOut,
+    handleMouseDown, handleMouseMove, handleMouseUp, handleMouseLeave, handleWheel,
+    resize, dispose
   }
 }

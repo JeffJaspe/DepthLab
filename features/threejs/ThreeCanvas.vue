@@ -4,7 +4,7 @@
     class="canvas-container"
     @mousemove="onMouseMove"
     @mouseup="onMouseUp"
-    @mouseleave="onMouseUp"
+    @mouseleave="onMouseLeave"
   >
     <!-- Actual Three.js canvas -->
     <canvas
@@ -111,6 +111,7 @@ const {
   handleMouseDown,
   handleMouseMove,
   handleMouseUp,
+  handleMouseLeave,
   handleWheel,
   zoomIn,
   zoomOut,
@@ -160,6 +161,10 @@ function onMouseMove(e: MouseEvent) {
 
 function onMouseUp() {
   handleMouseUp()
+}
+
+function onMouseLeave() {
+  handleMouseLeave()
 }
 
 function onWheel(e: WheelEvent) {
