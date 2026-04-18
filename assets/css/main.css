@@ -1,0 +1,336 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ─── Base reset & defaults ─────────────────────────────────────── */
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    @apply bg-bg text-text-primary;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-bg overflow-hidden;
+    margin: 0;
+    padding: 0;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-bg-elevated rounded-full;
+    border: none;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(108, 99, 255, 0.4);
+  }
+
+  ::selection {
+    background: rgba(108, 99, 255, 0.35);
+    color: #F0F0FF;
+  }
+}
+
+/* ─── Custom range input styles ────────────────────────────────── */
+@layer components {
+  .slider-input {
+    @apply appearance-none w-full h-[3px] rounded-full outline-none cursor-pointer;
+    background: linear-gradient(
+      to right,
+      #6C63FF var(--slider-percent, 50%),
+      rgba(255, 255, 255, 0.1) var(--slider-percent, 50%)
+    );
+    transition: background 0.1s ease;
+  }
+
+  .slider-input::-webkit-slider-thumb {
+    @apply appearance-none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #6C63FF;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 8px rgba(108, 99, 255, 0.5);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .slider-input::-webkit-slider-thumb:hover {
+    transform: scale(1.2);
+    box-shadow: 0 0 12px rgba(108, 99, 255, 0.8);
+  }
+
+  .slider-input::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: #6C63FF;
+    border: 2px solid rgba(255, 255, 255, 0.15);
+    box-shadow: 0 0 8px rgba(108, 99, 255, 0.5);
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .slider-input:focus::-webkit-slider-thumb {
+    box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.25), 0 0 12px rgba(108, 99, 255, 0.6);
+  }
+
+  /* Glass panel */
+  .glass-panel {
+    background: rgba(17, 17, 24, 0.8);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .glass-panel-elevated {
+    background: rgba(26, 26, 36, 0.85);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  /* Separator */
+  .separator {
+    @apply border-0 h-px w-full;
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  /* Toggle switch */
+  .toggle-switch {
+    @apply relative inline-flex items-center cursor-pointer;
+  }
+
+  .toggle-switch input {
+    @apply opacity-0 w-0 h-0 absolute;
+  }
+
+  .toggle-track {
+    @apply block relative w-9 h-5 rounded-full transition-colors duration-200 ease-in-out;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .toggle-track.active {
+    background: #6C63FF;
+    border-color: rgba(108, 99, 255, 0.5);
+    box-shadow: 0 0 10px rgba(108, 99, 255, 0.35);
+  }
+
+  .toggle-thumb {
+    @apply absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform duration-200 ease-in-out;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  }
+
+  .toggle-thumb.active {
+    transform: translateX(16px);
+  }
+
+  /* Accent gradient button */
+  .btn-accent {
+    background: linear-gradient(135deg, #6C63FF 0%, #8B5CF6 100%);
+    box-shadow: 0 2px 12px rgba(108, 99, 255, 0.35);
+    transition: all 0.15s ease;
+  }
+
+  .btn-accent:hover:not(:disabled) {
+    background: linear-gradient(135deg, #7B74FF 0%, #9D6EFF 100%);
+    box-shadow: 0 4px 20px rgba(108, 99, 255, 0.5);
+    transform: translateY(-1px);
+  }
+
+  .btn-accent:active:not(:disabled) {
+    transform: translateY(0px);
+    box-shadow: 0 2px 8px rgba(108, 99, 255, 0.3);
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    background: transparent;
+    transition: all 0.15s ease;
+  }
+
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  .btn-ghost:active:not(:disabled) {
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  /* Outlined button */
+  .btn-outline {
+    background: transparent;
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    transition: all 0.15s ease;
+  }
+
+  .btn-outline:hover:not(:disabled) {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: rgba(255, 255, 255, 0.25);
+  }
+
+  /* Sidebar section label */
+  .sidebar-label {
+    @apply text-xs font-semibold uppercase tracking-widest;
+    color: #6B6B8A;
+    letter-spacing: 0.08em;
+  }
+
+  /* Panel section */
+  .panel-section {
+    @apply px-4 py-3;
+  }
+
+  /* Value badge (monospace value display) */
+  .value-badge {
+    @apply font-mono text-xs px-1.5 py-0.5 rounded;
+    background: rgba(108, 99, 255, 0.12);
+    color: #A09EFF;
+    min-width: 44px;
+    text-align: right;
+  }
+
+  /* Grid background for canvas */
+  .canvas-grid-bg {
+    background-image:
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+    background-size: 40px 40px;
+  }
+
+  /* Animated gradient text */
+  .gradient-text {
+    background: linear-gradient(135deg, #6C63FF 0%, #FF6B6B 50%, #8B5CF6 100%);
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: shimmer 4s linear infinite;
+  }
+
+  /* Topbar gradient line */
+  .topbar-gradient-line {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(108, 99, 255, 0.5) 30%,
+      rgba(139, 92, 246, 0.5) 60%,
+      transparent 100%
+    );
+    height: 1px;
+  }
+
+  /* File drop zone */
+  .drop-zone {
+    border: 1.5px dashed rgba(108, 99, 255, 0.3);
+    background: rgba(108, 99, 255, 0.04);
+    transition: all 0.2s ease;
+  }
+
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    border-color: rgba(108, 99, 255, 0.6);
+    background: rgba(108, 99, 255, 0.08);
+    box-shadow: inset 0 0 20px rgba(108, 99, 255, 0.06);
+  }
+
+  /* Input field */
+  .input-field {
+    @apply bg-bg-input border rounded px-3 py-1.5 text-sm text-text-primary outline-none;
+    border-color: rgba(255, 255, 255, 0.08);
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  }
+
+  .input-field:focus {
+    border-color: rgba(108, 99, 255, 0.5);
+    box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.1);
+  }
+
+  /* Tooltip */
+  .tooltip-content {
+    @apply absolute z-50 px-2 py-1 text-xs rounded pointer-events-none;
+    background: rgba(26, 26, 36, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+    color: #B0B0CC;
+    white-space: nowrap;
+    animation: tooltip-in 0.1s ease;
+  }
+
+  /* Status bar item */
+  .statusbar-item {
+    @apply flex items-center gap-1.5 text-xs px-2;
+    color: #6B6B8A;
+  }
+
+  .statusbar-item:hover {
+    color: #B0B0CC;
+  }
+}
+
+/* ─── Utility animations ────────────────────────────────────────── */
+@layer utilities {
+  .animate-tooltip-in {
+    animation: tooltip-in 0.1s ease forwards;
+  }
+
+  @keyframes tooltip-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .transition-fast {
+    transition: all 0.15s ease;
+  }
+
+  .transition-medium {
+    transition: all 0.2s ease;
+  }
+
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Glow effects */
+  .glow-accent {
+    box-shadow: 0 0 20px rgba(108, 99, 255, 0.3);
+  }
+
+  .glow-accent-sm {
+    box-shadow: 0 0 10px rgba(108, 99, 255, 0.25);
+  }
+
+  /* Text shadow for headings */
+  .text-glow {
+    text-shadow: 0 0 30px rgba(108, 99, 255, 0.4);
+  }
+
+  /* Inset shadow (top edge highlight) */
+  .inset-highlight {
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  }
+}
