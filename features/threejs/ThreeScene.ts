@@ -214,14 +214,12 @@ export class ThreeScene {
       const geo = new THREE.PlaneGeometry(w, h, 1, 1)
       this.mainMesh = new THREE.Mesh(geo, this.makeFrontMaterial())
     } else {
-      // Two planes sharing the same alpha texture — depth respects PNG transparency.
-      // Front face: offset forward by d/2
+      // Front face at z = +d/2
       const frontGeo = new THREE.PlaneGeometry(w, h, 1, 1)
       this.mainMesh = new THREE.Mesh(frontGeo, this.makeFrontMaterial())
       this.mainMesh.position.z = d / 2
 
-      // Back face: same texture for alpha clipping, dark fill, faces backward
-      const backGeo = new THREE.PlaneGeometry(w, h, 1, 1)
+      // Back face at z = -d/2 (dark, BackSide)
       const backMat = new THREE.MeshStandardMaterial({
         map: this.currentTexture!,
         alphaTest: 0.05,
@@ -230,10 +228,30 @@ export class ThreeScene {
         roughness: 0.9,
         side: THREE.BackSide
       })
-      const backMesh = new THREE.Mesh(backGeo, backMat)
+      const backMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 1, 1), backMat)
       backMesh.position.z = -d / 2
       backMesh.receiveShadow = true
       this.meshGroup.add(backMesh)
+
+      // Interior edge-fill slices — solid dark planes clipped by PNG alpha.
+      // These fill the hollow gap visible when viewing from the side.
+      const numInterior = Math.max(1, Math.min(6, Math.ceil(d / 0.08)))
+      const edgeColor = new THREE.Color(0x111118)
+      for (let i = 1; i <= numInterior; i++) {
+        const t = i / (numInterior + 1)
+        const z = d * (t - 0.5)
+        const fillMat = new THREE.MeshStandardMaterial({
+          map: this.currentTexture!,
+          alphaTest: 0.05,
+          transparent: true,
+          color: edgeColor,
+          roughness: 0.9,
+          side: THREE.DoubleSide
+        })
+        const fillMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 1, 1), fillMat)
+        fillMesh.position.z = z
+        this.meshGroup.add(fillMesh)
+      }
     }
 
     this.mainMesh.receiveShadow = true
