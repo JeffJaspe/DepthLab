@@ -1,22 +1,17 @@
 <template>
   <div class="editor-root">
-    <!-- Top Bar -->
     <TopBar />
 
-    <!-- Main area (sidebar + canvas + panel) -->
     <div class="editor-main">
-      <!-- Left Sidebar -->
       <LeftSidebar @reset-view="handleResetView" />
-
-      <!-- Center Canvas -->
       <ThreeCanvas ref="canvasRef" />
-
-      <!-- Right Panel -->
       <RightPanel @reset-camera="handleResetCamera" />
     </div>
 
-    <!-- Status Bar -->
     <StatusBar />
+
+    <!-- Export modal (rendered via Teleport inside component) -->
+    <ExportPanel />
   </div>
 </template>
 
@@ -26,6 +21,7 @@ import TopBar from '~/components/editor/TopBar.vue'
 import LeftSidebar from '~/components/editor/LeftSidebar.vue'
 import RightPanel from '~/components/editor/RightPanel.vue'
 import StatusBar from '~/components/editor/StatusBar.vue'
+import ExportPanel from '~/components/editor/ExportPanel.vue'
 import ThreeCanvas from '~/features/threejs/ThreeCanvas.vue'
 
 const canvasRef = ref<InstanceType<typeof ThreeCanvas> | null>(null)

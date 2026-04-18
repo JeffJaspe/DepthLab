@@ -2,7 +2,6 @@ import { ref, onMounted, onUnmounted, watch, type Ref } from 'vue'
 import { useSceneStore } from '~/stores/sceneStore'
 import { useEditorStore } from '~/stores/editorStore'
 
-// Lazy import Three.js scene class to avoid SSR issues
 let ThreeSceneClass: typeof import('~/features/threejs/ThreeScene').ThreeScene | null = null
 let gsapLib: typeof import('gsap').gsap | null = null
 
@@ -25,7 +24,6 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
   const isReady = ref(false)
   const cameraPos = ref({ x: 0, y: 0, z: 5 })
 
-  // Initialize scene
   async function initScene() {
     if (!canvasRef.value) return
 
@@ -36,15 +34,15 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     threeScene.init()
     isReady.value = true
 
-    // Sync initial state
     threeScene.updateLights({
       ambientIntensity: sceneStore.ambientIntensity,
       directionalIntensity: sceneStore.directionalIntensity,
       lightPosition: sceneStore.lightPosition
     })
     threeScene.updateCamera(sceneStore.fov)
+    threeScene.setAutoRotate(sceneStore.autoRotate, sceneStore.autoRotateSpeed)
+    threeScene.updateBgColor(sceneStore.bgColor)
 
-    // Start camera position polling
     startCameraPolling()
   }
 
@@ -62,13 +60,11 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     cameraPollingId = requestAnimationFrame(tick)
   }
 
-  // Load texture when image URL changes
   async function loadTexture(url: string) {
     if (!threeScene) return
 
     await threeScene.loadTexture(url)
 
-    // Animate mesh in with GSAP
     const mesh = threeScene.getMesh()
     if (mesh && gsapLib) {
       gsapLib.fromTo(
@@ -76,11 +72,8 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
         { x: 0, y: 0, z: 0 },
         { x: 1, y: 1, z: 1, duration: 0.6, ease: 'back.out(1.7)' }
       )
-      // Also animate camera smoothly
-      gsapLib.to(mesh.position, { y: 0, duration: 0.4, ease: 'power2.out' })
     }
 
-    // Sync material
     threeScene.updateMaterial({
       metalness: sceneStore.metalness,
       roughness: sceneStore.roughness,
@@ -112,44 +105,21 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     })
 
     threeScene.updateCamera(sceneStore.fov)
+    threeScene.setAutoRotate(sceneStore.autoRotate, sceneStore.autoRotateSpeed)
+    threeScene.updateBgColor(sceneStore.bgColor)
   }
 
   function resetCamera() {
-    if (!threeScene) return
-    threeScene.resetCamera()
-
-    if (gsapLib) {
-      // Visual feedback - can also tween spherical via store
-    }
+    threeScene?.resetCamera()
   }
 
-  function zoomIn() {
-    threeScene?.zoomIn()
-  }
-
-  function zoomOut() {
-    threeScene?.zoomOut()
-  }
-
-  function handleMouseDown(e: MouseEvent) {
-    threeScene?.handleMouseDown(e)
-  }
-
-  function handleMouseMove(e: MouseEvent) {
-    threeScene?.handleMouseMove(e)
-  }
-
-  function handleMouseUp() {
-    threeScene?.handleMouseUp()
-  }
-
-  function handleWheel(e: WheelEvent) {
-    threeScene?.handleWheel(e)
-  }
-
-  function resize(w: number, h: number) {
-    threeScene?.resize(w, h)
-  }
+  function zoomIn() { threeScene?.zoomIn() }
+  function zoomOut() { threeScene?.zoomOut() }
+  function handleMouseDown(e: MouseEvent) { threeScene?.handleMouseDown(e) }
+  function handleMouseMove(e: MouseEvent) { threeScene?.handleMouseMove(e) }
+  function handleMouseUp() { threeScene?.handleMouseUp() }
+  function handleWheel(e: WheelEvent) { threeScene?.handleWheel(e) }
+  function resize(w: number, h: number) { threeScene?.resize(w, h) }
 
   function dispose() {
     if (cameraPollingId !== null) {
@@ -161,7 +131,6 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     isReady.value = false
   }
 
-  // Watch scene store changes and sync
   watch(
     () => [
       sceneStore.position,
@@ -174,17 +143,18 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
       sceneStore.ambientIntensity,
       sceneStore.directionalIntensity,
       sceneStore.lightPosition,
-      sceneStore.fov
+      sceneStore.fov,
+      sceneStore.autoRotate,
+      sceneStore.autoRotateSpeed,
+      sceneStore.bgColor
     ],
-    () => {
-      if (isReady.value) updateScene()
-    },
+    () => { if (isReady.value) updateScene() },
     { deep: true }
   )
 
-  // Watch for image URL changes
+  // Watch the active image URL (processed or original)
   watch(
-    () => editorStore.uploadedImageUrl,
+    () => editorStore.activeImageUrl,
     async (url) => {
       if (url && isReady.value) {
         await loadTexture(url)
@@ -192,13 +162,8 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
     }
   )
 
-  onMounted(async () => {
-    await initScene()
-  })
-
-  onUnmounted(() => {
-    dispose()
-  })
+  onMounted(async () => { await initScene() })
+  onUnmounted(() => { dispose() })
 
   return {
     isReady,

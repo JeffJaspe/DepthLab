@@ -6,7 +6,11 @@ export interface EditorState {
   isSaved: boolean
   uploadedImageUrl: string | null
   uploadedImageName: string | null
+  processedImageUrl: string | null
+  bgRemovalEnabled: boolean
+  isProcessingBg: boolean
   selectedTool: 'select' | 'move' | 'rotate' | 'scale'
+  showExportPanel: boolean
 }
 
 export const useEditorStore = defineStore('editor', {
@@ -16,12 +20,17 @@ export const useEditorStore = defineStore('editor', {
     isSaved: true,
     uploadedImageUrl: null,
     uploadedImageName: null,
-    selectedTool: 'select'
+    processedImageUrl: null,
+    bgRemovalEnabled: false,
+    isProcessingBg: false,
+    selectedTool: 'select',
+    showExportPanel: false
   }),
 
   getters: {
     hasImage: (state) => state.uploadedImageUrl !== null,
-    displayName: (state) => state.projectName || 'Untitled Project'
+    displayName: (state) => state.projectName || 'Untitled Project',
+    activeImageUrl: (state) => state.processedImageUrl ?? state.uploadedImageUrl
   },
 
   actions: {
@@ -37,7 +46,6 @@ export const useEditorStore = defineStore('editor', {
     async generate3D() {
       if (this.isGenerating) return
       this.isGenerating = true
-      // Simulate processing
       await new Promise((resolve) => setTimeout(resolve, 2800))
       this.isGenerating = false
       this.isSaved = false
@@ -48,12 +56,23 @@ export const useEditorStore = defineStore('editor', {
     },
 
     uploadImage(url: string, name: string) {
-      // Revoke old object URL if exists
       if (this.uploadedImageUrl && this.uploadedImageUrl.startsWith('blob:')) {
         URL.revokeObjectURL(this.uploadedImageUrl)
       }
+      if (this.processedImageUrl && this.processedImageUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(this.processedImageUrl)
+      }
       this.uploadedImageUrl = url
       this.uploadedImageName = name
+      this.processedImageUrl = null
+      this.isSaved = false
+    },
+
+    setProcessedImageUrl(url: string | null) {
+      if (this.processedImageUrl && this.processedImageUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(this.processedImageUrl)
+      }
+      this.processedImageUrl = url
       this.isSaved = false
     },
 
@@ -61,12 +80,32 @@ export const useEditorStore = defineStore('editor', {
       if (this.uploadedImageUrl && this.uploadedImageUrl.startsWith('blob:')) {
         URL.revokeObjectURL(this.uploadedImageUrl)
       }
+      if (this.processedImageUrl && this.processedImageUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(this.processedImageUrl)
+      }
       this.uploadedImageUrl = null
       this.uploadedImageName = null
+      this.processedImageUrl = null
+    },
+
+    setBgRemovalEnabled(value: boolean) {
+      this.bgRemovalEnabled = value
+    },
+
+    setProcessingBg(value: boolean) {
+      this.isProcessingBg = value
     },
 
     setTool(tool: EditorState['selectedTool']) {
       this.selectedTool = tool
+    },
+
+    openExportPanel() {
+      this.showExportPanel = true
+    },
+
+    closeExportPanel() {
+      this.showExportPanel = false
     }
   }
 })

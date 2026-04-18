@@ -29,14 +29,28 @@
             @change="handleFileChange"
           />
 
-          <!-- Thumbnail or placeholder -->
           <div v-if="editorStore.uploadedImageUrl" class="w-full">
             <div class="relative">
               <img
-                :src="editorStore.uploadedImageUrl"
+                :src="editorStore.activeImageUrl || editorStore.uploadedImageUrl"
                 alt="Uploaded image"
                 class="w-full h-20 object-cover rounded-md border border-white/10"
+                :style="{ background: 'repeating-conic-gradient(#1a1a2e 0% 25%, #0d0d1a 0% 50%) 0 0 / 12px 12px' }"
               />
+              <!-- Processing indicator -->
+              <div
+                v-if="editorStore.isProcessingBg"
+                class="absolute inset-0 rounded-md flex items-center justify-center bg-black/60 backdrop-blur-sm"
+              >
+                <div class="processing-spinner" />
+              </div>
+              <!-- BG removed badge -->
+              <div
+                v-else-if="editorStore.processedImageUrl"
+                class="absolute top-1 left-1 px-1.5 py-0.5 rounded text-xs font-medium bg-accent/20 text-accent border border-accent/30"
+              >
+                BG removed
+              </div>
               <button
                 class="absolute top-1 right-1 w-5 h-5 rounded bg-black/60 hover:bg-black/80 flex items-center justify-center transition-fast"
                 @click.stop="clearImage"
@@ -60,10 +74,28 @@
               </svg>
             </div>
             <div class="text-center">
-              <p class="text-xs text-text-secondary font-medium">Drop PNG/SVG here</p>
-              <p class="text-xs text-text-muted mt-0.5">or click to browse</p>
+              <p class="text-xs text-text-secondary font-medium">Drop image here</p>
+              <p class="text-xs text-text-muted mt-0.5">PNG · JPG · SVG</p>
             </div>
           </template>
+        </div>
+
+        <!-- BG Removal toggle -->
+        <div v-if="editorStore.uploadedImageUrl" class="bg-removal-row mt-3">
+          <div class="flex items-center gap-1.5">
+            <svg width="11" height="11" viewBox="0 0 16 16" fill="none" class="text-accent shrink-0">
+              <path d="M2 8L6 12L14 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span class="text-xs text-text-secondary">Remove Background</span>
+          </div>
+          <label
+            class="toggle-switch cursor-pointer"
+            @click.prevent="toggleBgRemoval"
+          >
+            <div class="toggle-track" :class="{ active: editorStore.bgRemovalEnabled }">
+              <div class="toggle-thumb" :class="{ active: editorStore.bgRemovalEnabled }" />
+            </div>
+          </label>
         </div>
       </section>
 
@@ -74,7 +106,6 @@
         <div class="section-header">
           <svg width="12" height="12" viewBox="0 0 16 16" fill="none" class="text-accent">
             <path d="M9 1L15 7L7 15L1 9L9 1Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
-            <path d="M7 15L1 9L3 7" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
           </svg>
           <span class="sidebar-label">Tools</span>
         </div>
@@ -97,7 +128,6 @@
 
           <UiSeparator class="my-1" />
 
-          <!-- Reset View -->
           <UiTooltip text="Reset View" position="right">
             <button class="tool-btn" @click="emit('resetView')">
               <ResetViewIcon />
@@ -123,10 +153,7 @@
             :key="project.id"
             class="recent-item group"
           >
-            <div
-              class="recent-thumb shrink-0"
-              :style="{ background: project.color }"
-            />
+            <div class="recent-thumb shrink-0" :style="{ background: project.color }" />
             <div class="min-w-0 flex-1 text-left">
               <p class="text-xs text-text-secondary group-hover:text-text-primary transition-fast truncate">
                 {{ project.name }}
@@ -141,88 +168,50 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineComponent, h } from 'vue'
+import { ref, defineComponent, h, watch } from 'vue'
 import { useEditorStore } from '~/stores/editorStore'
+import { processImageFile, removeBackground } from '~/features/image-processing/imageProcessor'
 
 const emit = defineEmits<{ resetView: [] }>()
 const editorStore = useEditorStore()
 const fileInputRef = ref<HTMLInputElement | null>(null)
 const isDragOver = ref(false)
 
-// ── Tool icons (inline SVG components) ──────────────────────
+// ── Tool icons ───────────────────────────────────────────────
 
 const SelectIcon = defineComponent({
-  render: () =>
-    h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
-      h('path', {
-        d: 'M3 1L13 8L8.5 9.5L6 14L3 1Z',
-        stroke: 'currentColor', 'stroke-width': '1.3',
-        'stroke-linejoin': 'round'
-      })
-    ])
+  render: () => h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
+    h('path', { d: 'M3 1L13 8L8.5 9.5L6 14L3 1Z', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linejoin': 'round' })
+  ])
 })
 
 const MoveIcon = defineComponent({
-  render: () =>
-    h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
-      h('path', {
-        d: 'M8 2V14M2 8H14M8 2L6 4M8 2L10 4M8 14L6 12M8 14L10 12M2 8L4 6M2 8L4 10M14 8L12 6M14 8L12 10',
-        stroke: 'currentColor', 'stroke-width': '1.3',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      })
-    ])
+  render: () => h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
+    h('path', { d: 'M8 2V14M2 8H14M8 2L6 4M8 2L10 4M8 14L6 12M8 14L10 12M2 8L4 6M2 8L4 10M14 8L12 6M14 8L12 10', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' })
+  ])
 })
 
 const RotateIcon = defineComponent({
-  render: () =>
-    h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
-      h('path', {
-        d: 'M14 8C14 11.314 11.314 14 8 14C4.686 14 2 11.314 2 8C2 4.686 4.686 2 8 2',
-        stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round'
-      }),
-      h('path', {
-        d: 'M10 2H14V6',
-        stroke: 'currentColor', 'stroke-width': '1.3',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      }),
-      h('path', {
-        d: 'M8 2L14 2',
-        stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round'
-      })
-    ])
+  render: () => h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
+    h('path', { d: 'M14 8C14 11.314 11.314 14 8 14C4.686 14 2 11.314 2 8C2 4.686 4.686 2 8 2', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round' }),
+    h('path', { d: 'M10 2H14V6', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+    h('path', { d: 'M8 2L14 2', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round' })
+  ])
 })
 
 const ScaleIcon = defineComponent({
-  render: () =>
-    h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
-      h('rect', {
-        x: '4', y: '4', width: '8', height: '8', rx: '1',
-        stroke: 'currentColor', 'stroke-width': '1.3'
-      }),
-      h('path', {
-        d: 'M1 1H4M1 1V4M15 1H12M15 1V4M1 15H4M1 15V12M15 15H12M15 15V12',
-        stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round'
-      })
-    ])
+  render: () => h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
+    h('rect', { x: '4', y: '4', width: '8', height: '8', rx: '1', stroke: 'currentColor', 'stroke-width': '1.3' }),
+    h('path', { d: 'M1 1H4M1 1V4M15 1H12M15 1V4M1 15H4M1 15V12M15 15H12M15 15V12', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round' })
+  ])
 })
 
 const ResetViewIcon = defineComponent({
-  render: () =>
-    h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
-      h('path', {
-        d: 'M8 1C4.134 1 1 4.134 1 8C1 11.866 4.134 15 8 15C11.866 15 15 11.866 15 8',
-        stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round'
-      }),
-      h('path', {
-        d: 'M11 1L15 1L15 5',
-        stroke: 'currentColor', 'stroke-width': '1.3',
-        'stroke-linecap': 'round', 'stroke-linejoin': 'round'
-      }),
-      h('path', {
-        d: 'M8 5V8L10 10',
-        stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round'
-      })
-    ])
+  render: () => h('svg', { width: 15, height: 15, viewBox: '0 0 16 16', fill: 'none' }, [
+    h('path', { d: 'M8 1C4.134 1 1 4.134 1 8C1 11.866 4.134 15 8 15C11.866 15 15 11.866 15 8', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round' }),
+    h('path', { d: 'M11 1L15 1L15 5', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }),
+    h('path', { d: 'M8 5V8L10 10', stroke: 'currentColor', 'stroke-width': '1.3', 'stroke-linecap': 'round' })
+  ])
 })
 
 const tools = [
@@ -232,27 +221,10 @@ const tools = [
   { id: 'scale', label: 'Scale (S)', icon: ScaleIcon }
 ]
 
-// ── Recent projects (mock data) ──────────────────────────────
-
 const recentProjects = [
-  {
-    id: 1,
-    name: 'Mountain Terrain',
-    date: '2 hours ago',
-    color: 'linear-gradient(135deg, #6C63FF, #8B5CF6)'
-  },
-  {
-    id: 2,
-    name: 'Product Shot v2',
-    date: 'Yesterday',
-    color: 'linear-gradient(135deg, #FF6B6B, #FF8E53)'
-  },
-  {
-    id: 3,
-    name: 'Logo 3D Render',
-    date: '3 days ago',
-    color: 'linear-gradient(135deg, #22C55E, #16A34A)'
-  }
+  { id: 1, name: 'Mountain Terrain', date: '2 hours ago', color: 'linear-gradient(135deg, #6C63FF, #8B5CF6)' },
+  { id: 2, name: 'Product Shot v2', date: 'Yesterday', color: 'linear-gradient(135deg, #FF6B6B, #FF8E53)' },
+  { id: 3, name: 'Logo 3D Render', date: '3 days ago', color: 'linear-gradient(135deg, #22C55E, #16A34A)' }
 ]
 
 // ── Handlers ─────────────────────────────────────────────────
@@ -265,22 +237,55 @@ function handleFileChange(e: Event) {
   const target = e.target as HTMLInputElement
   const file = target.files?.[0]
   if (file) processFile(file)
-  // Reset input so same file can be re-selected
   target.value = ''
 }
 
 function handleDrop(e: DragEvent) {
   isDragOver.value = false
   const file = e.dataTransfer?.files?.[0]
-  if (file && (file.type.startsWith('image/'))) {
-    processFile(file)
+  if (file && file.type.startsWith('image/')) processFile(file)
+}
+
+async function processFile(file: File) {
+  const processed = await processImageFile(file)
+  editorStore.uploadImage(processed.url, file.name)
+
+  // Run bg removal immediately if enabled
+  if (editorStore.bgRemovalEnabled) {
+    await runBgRemoval(processed.url)
   }
 }
 
-function processFile(file: File) {
-  const url = URL.createObjectURL(file)
-  editorStore.uploadImage(url, file.name)
+async function runBgRemoval(sourceUrl: string) {
+  editorStore.setProcessingBg(true)
+  try {
+    const result = await removeBackground(sourceUrl)
+    editorStore.setProcessedImageUrl(result)
+  } catch (err) {
+    console.error('[BgRemoval] Failed:', err)
+    editorStore.setProcessedImageUrl(null)
+  } finally {
+    editorStore.setProcessingBg(false)
+  }
 }
+
+async function toggleBgRemoval() {
+  const next = !editorStore.bgRemovalEnabled
+  editorStore.setBgRemovalEnabled(next)
+
+  if (next && editorStore.uploadedImageUrl) {
+    await runBgRemoval(editorStore.uploadedImageUrl)
+  } else {
+    editorStore.setProcessedImageUrl(null)
+  }
+}
+
+// Re-run bg removal if a new image is uploaded while toggle is on
+watch(() => editorStore.uploadedImageUrl, async (url) => {
+  if (url && editorStore.bgRemovalEnabled) {
+    await runBgRemoval(url)
+  }
+})
 
 function clearImage() {
   editorStore.clearImage()
@@ -319,6 +324,29 @@ function clearImage() {
   margin-bottom: 2px;
 }
 
+.bg-removal-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px;
+  background: rgba(108, 99, 255, 0.05);
+  border: 1px solid rgba(108, 99, 255, 0.12);
+  border-radius: 8px;
+}
+
+.processing-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid rgba(108, 99, 255, 0.2);
+  border-top-color: #6C63FF;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
 .tools-strip {
   display: flex;
   flex-direction: column;
@@ -351,9 +379,7 @@ function clearImage() {
   box-shadow: 0 0 8px rgba(108, 99, 255, 0.2);
 }
 
-.recent-list {
-  flex: 1;
-}
+.recent-list { flex: 1; }
 
 .recent-item {
   display: flex;

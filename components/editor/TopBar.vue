@@ -91,18 +91,21 @@
           Save
         </UiButton>
 
-        <!-- Export (disabled with tooltip) -->
-        <UiTooltip text="Coming soon" position="bottom">
-          <UiButton variant="outline" size="sm" disabled>
-            <template #icon>
-              <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-                <path d="M8 2V10M8 10L5 7M8 10L11 7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
-                <path d="M2 12V13.5C2 13.78 2.22 14 2.5 14H13.5C13.78 14 14 13.78 14 13.5V12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
-              </svg>
-            </template>
-            Export
-          </UiButton>
-        </UiTooltip>
+        <!-- Export -->
+        <UiButton
+          variant="outline"
+          size="sm"
+          :disabled="!editorStore.hasImage"
+          @click="editorStore.openExportPanel()"
+        >
+          <template #icon>
+            <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+              <path d="M8 2V10M8 10L5 7M8 10L11 7" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round" />
+              <path d="M2 12V13.5C2 13.78 2.22 14 2.5 14H13.5C13.78 14 14 13.78 14 13.5V12" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+          </template>
+          Export
+        </UiButton>
 
         <!-- Generate 3D -->
         <UiButton

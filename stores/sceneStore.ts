@@ -19,6 +19,9 @@ export interface SceneState {
   lightPosition: Vec3
   fov: number
   cameraPosition: Vec3
+  autoRotate: boolean
+  autoRotateSpeed: number
+  bgColor: string
 }
 
 const defaultState = (): SceneState => ({
@@ -33,7 +36,10 @@ const defaultState = (): SceneState => ({
   directionalIntensity: 1.2,
   lightPosition: { x: 5, y: 8, z: 5 },
   fov: 75,
-  cameraPosition: { x: 0, y: 0, z: 5 }
+  cameraPosition: { x: 0, y: 0, z: 5 },
+  autoRotate: false,
+  autoRotateSpeed: 0.5,
+  bgColor: '#0A0A0F'
 })
 
 export const useSceneStore = defineStore('scene', {
@@ -96,20 +102,35 @@ export const useSceneStore = defineStore('scene', {
       this.cameraPosition = { ...pos }
     },
 
+    setAutoRotate(value: boolean) {
+      this.autoRotate = value
+    },
+
+    setAutoRotateSpeed(value: number) {
+      this.autoRotateSpeed = Math.max(0.1, Math.min(5, value))
+    },
+
+    setBgColor(value: string) {
+      this.bgColor = value
+    },
+
     resetScene() {
-      const defaults = defaultState()
-      this.position = defaults.position
-      this.rotation = defaults.rotation
-      this.scale = defaults.scale
-      this.metalness = defaults.metalness
-      this.roughness = defaults.roughness
-      this.opacity = defaults.opacity
-      this.wireframe = defaults.wireframe
-      this.ambientIntensity = defaults.ambientIntensity
-      this.directionalIntensity = defaults.directionalIntensity
-      this.lightPosition = defaults.lightPosition
-      this.fov = defaults.fov
-      this.cameraPosition = defaults.cameraPosition
+      const d = defaultState()
+      this.position = d.position
+      this.rotation = d.rotation
+      this.scale = d.scale
+      this.metalness = d.metalness
+      this.roughness = d.roughness
+      this.opacity = d.opacity
+      this.wireframe = d.wireframe
+      this.ambientIntensity = d.ambientIntensity
+      this.directionalIntensity = d.directionalIntensity
+      this.lightPosition = d.lightPosition
+      this.fov = d.fov
+      this.cameraPosition = d.cameraPosition
+      this.autoRotate = d.autoRotate
+      this.autoRotateSpeed = d.autoRotateSpeed
+      this.bgColor = d.bgColor
     }
   }
 })

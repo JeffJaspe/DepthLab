@@ -32,8 +32,9 @@ export class ThreeScene {
   private directionalLight: THREE.DirectionalLight
   private canvas: HTMLCanvasElement
   private isDisposed: boolean = false
+  private autoRotateEnabled: boolean = false
+  private autoRotateSpeed: number = 0.5
 
-  // Spherical coordinate state for orbit
   private spherical: { radius: number; theta: number; phi: number } = {
     radius: 5,
     theta: 0,
@@ -57,7 +58,6 @@ export class ThreeScene {
   init(): void {
     const { clientWidth, clientHeight } = this.canvas
 
-    // Renderer setup
     this.renderer.setSize(clientWidth, clientHeight)
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     this.renderer.setClearColor(0x0A0A0F, 1)
@@ -66,50 +66,46 @@ export class ThreeScene {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.renderer.toneMappingExposure = 1.0
 
-    // Scene background
     this.scene.background = new THREE.Color(0x0A0A0F)
 
-    // Lights
     this.scene.add(this.ambientLight)
 
     this.directionalLight.position.set(5, 8, 5)
     this.directionalLight.castShadow = true
-    this.directionalLight.shadow.mapSize.width = 1024
-    this.directionalLight.shadow.mapSize.height = 1024
+    this.directionalLight.shadow.mapSize.width = 2048
+    this.directionalLight.shadow.mapSize.height = 2048
     this.directionalLight.shadow.camera.near = 0.1
     this.directionalLight.shadow.camera.far = 50
+    this.directionalLight.shadow.bias = -0.001
     this.scene.add(this.directionalLight)
 
-    // Hemisphere light for ambient fill
+    // Fill light from below-left for softer shadows
+    const fillLight = new THREE.DirectionalLight(0x8B5CF6, 0.3)
+    fillLight.position.set(-5, -3, -5)
+    this.scene.add(fillLight)
+
     const hemisphereLight = new THREE.HemisphereLight(0x6C63FF, 0x0A0A0F, 0.2)
     this.scene.add(hemisphereLight)
 
-    // Camera
     this.camera.position.set(0, 0, 5)
     this.camera.lookAt(0, 0, 0)
 
-    // Fog (subtle depth)
-    this.scene.fog = new THREE.FogExp2(0x0A0A0F, 0.05)
+    this.scene.fog = new THREE.FogExp2(0x0A0A0F, 0.04)
 
-    // Default cube
     this.createDefaultCube()
 
-    // Grid helper
     const gridHelper = new THREE.GridHelper(20, 20, 0x1A1A24, 0x111118)
     gridHelper.position.y = -2
-    gridHelper.material.opacity = 0.4
-    gridHelper.material.transparent = true
+    ;(gridHelper.material as THREE.Material).opacity = 0.4
+    ;(gridHelper.material as THREE.Material).transparent = true
     this.scene.add(gridHelper)
 
-    // Start animation
     this.animate()
   }
 
   private createDefaultCube(): void {
-    // Wireframe cube with accent color for the empty state
     const geometry = new THREE.BoxGeometry(1.5, 1.5, 1.5)
 
-    // Solid semi-transparent fill
     const material = new THREE.MeshStandardMaterial({
       color: 0x6C63FF,
       transparent: true,
@@ -119,7 +115,6 @@ export class ThreeScene {
 
     this.defaultCube = new THREE.Mesh(geometry, material)
 
-    // Wireframe overlay
     const wireframeMaterial = new THREE.MeshBasicMaterial({
       color: 0x6C63FF,
       wireframe: true,
@@ -129,7 +124,6 @@ export class ThreeScene {
     const wireframeMesh = new THREE.Mesh(geometry, wireframeMaterial)
     this.defaultCube.add(wireframeMesh)
 
-    // Edge lines
     const edges = new THREE.EdgesGeometry(geometry)
     const lineMaterial = new THREE.LineBasicMaterial({
       color: 0x8B5CF6,
@@ -154,27 +148,20 @@ export class ThreeScene {
           texture.magFilter = THREE.LinearFilter
           texture.generateMipmaps = true
 
-          // Remove default cube
           if (this.defaultCube) {
             this.scene.remove(this.defaultCube)
             this.defaultCube.geometry.dispose()
             this.defaultCube = null
           }
 
-          // Remove previous mesh
           if (this.mesh) {
             this.scene.remove(this.mesh)
             if (this.mesh.geometry) this.mesh.geometry.dispose()
-            if (this.mesh.material) {
-              if (Array.isArray(this.mesh.material)) {
-                this.mesh.material.forEach((m) => m.dispose())
-              } else {
-                this.mesh.material.dispose()
-              }
-            }
+            const mat = this.mesh.material as THREE.MeshStandardMaterial
+            if (mat.map) mat.map.dispose()
+            mat.dispose()
           }
 
-          // Determine aspect ratio from texture
           const aspect = texture.image.width / texture.image.height
           const width = 3
           const height = width / aspect
@@ -185,6 +172,7 @@ export class ThreeScene {
             metalness: 0.1,
             roughness: 0.7,
             transparent: true,
+            alphaTest: 0.01,
             opacity: 1,
             side: THREE.DoubleSide
           })
@@ -192,8 +180,6 @@ export class ThreeScene {
           this.mesh = new THREE.Mesh(geometry, material)
           this.mesh.receiveShadow = true
           this.mesh.castShadow = true
-
-          // Start hidden for GSAP animation
           this.mesh.scale.setScalar(0)
           this.scene.add(this.mesh)
 
@@ -216,10 +202,9 @@ export class ThreeScene {
     if (params.roughness !== undefined) mat.roughness = params.roughness
     if (params.opacity !== undefined) {
       mat.opacity = params.opacity
-      mat.transparent = params.opacity < 1
+      mat.transparent = params.opacity < 1 || true
     }
     if (params.wireframe !== undefined) mat.wireframe = params.wireframe
-
     mat.needsUpdate = true
   }
 
@@ -258,6 +243,19 @@ export class ThreeScene {
     this.camera.updateProjectionMatrix()
   }
 
+  updateBgColor(color: string): void {
+    this.scene.background = new THREE.Color(color)
+    this.renderer.setClearColor(new THREE.Color(color), 1)
+    if (this.scene.fog) {
+      this.scene.fog = new THREE.FogExp2(new THREE.Color(color).getHex(), 0.04)
+    }
+  }
+
+  setAutoRotate(enabled: boolean, speed = 0.5): void {
+    this.autoRotateEnabled = enabled
+    this.autoRotateSpeed = speed
+  }
+
   resetCamera(): void {
     this.spherical = { radius: 5, theta: 0, phi: Math.PI / 2 }
     this.updateCameraFromSpherical()
@@ -282,13 +280,10 @@ export class ThreeScene {
     const deltaX = e.clientX - this.previousMousePosition.x
     const deltaY = e.clientY - this.previousMousePosition.y
 
-    const sensitivity = 0.005
-
-    this.spherical.theta -= deltaX * sensitivity
-    this.spherical.phi = Math.max(0.05, Math.min(Math.PI - 0.05, this.spherical.phi - deltaY * sensitivity))
+    this.spherical.theta -= deltaX * 0.005
+    this.spherical.phi = Math.max(0.05, Math.min(Math.PI - 0.05, this.spherical.phi - deltaY * 0.005))
 
     this.updateCameraFromSpherical()
-
     this.previousMousePosition = { x: e.clientX, y: e.clientY }
   }
 
@@ -298,8 +293,7 @@ export class ThreeScene {
 
   handleWheel(e: WheelEvent): void {
     e.preventDefault()
-    const zoomSpeed = 0.1
-    const delta = e.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed
+    const delta = e.deltaY > 0 ? 1.1 : 0.9
     this.spherical.radius = Math.max(1, Math.min(20, this.spherical.radius * delta))
     this.updateCameraFromSpherical()
   }
@@ -338,22 +332,12 @@ export class ThreeScene {
     this.isDisposed = true
     cancelAnimationFrame(this.animationId)
 
-    // Dispose mesh
     if (this.mesh) {
       this.scene.remove(this.mesh)
       this.mesh.geometry.dispose()
-      if (Array.isArray(this.mesh.material)) {
-        this.mesh.material.forEach((m) => {
-          if ((m as THREE.MeshStandardMaterial).map) {
-            (m as THREE.MeshStandardMaterial).map!.dispose()
-          }
-          m.dispose()
-        })
-      } else {
-        const mat = this.mesh.material as THREE.MeshStandardMaterial
-        if (mat.map) mat.map.dispose()
-        mat.dispose()
-      }
+      const mat = this.mesh.material as THREE.MeshStandardMaterial
+      if (mat.map) mat.map.dispose()
+      mat.dispose()
     }
 
     if (this.defaultCube) {
@@ -369,10 +353,13 @@ export class ThreeScene {
 
     this.animationId = requestAnimationFrame(() => this.animate())
 
-    // Rotate default cube
     if (this.defaultCube) {
       this.defaultCube.rotation.x += 0.003
       this.defaultCube.rotation.y += 0.005
+    }
+
+    if (this.mesh && this.autoRotateEnabled && !this.isDragging) {
+      this.mesh.rotation.y += 0.01 * this.autoRotateSpeed
     }
 
     this.renderer.render(this.scene, this.camera)
