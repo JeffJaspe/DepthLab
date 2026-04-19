@@ -1,6 +1,7 @@
 import { ref, onMounted, onUnmounted, watch, type Ref } from 'vue'
 import { useSceneStore } from '~/stores/sceneStore'
 import { useEditorStore } from '~/stores/editorStore'
+import type { AnimationParamsMap } from '~/features/threejs/animations/types'
 
 let ThreeSceneClass: typeof import('~/features/threejs/ThreeScene').ThreeScene | null = null
 let gsapLib: typeof import('gsap').gsap | null = null
@@ -23,6 +24,21 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
   let threeScene: InstanceType<typeof import('~/features/threejs/ThreeScene').ThreeScene> | null = null
   const isReady = ref(false)
   const cameraPos = ref({ x: 0, y: 0, z: 5 })
+
+  // Track the last preset so we only call setAnimationPreset when it changes
+  let prevAnimPreset = ''
+
+  function buildAnimParams(): AnimationParamsMap {
+    return {
+      float:    { ...sceneStore.animFloat },
+      rotate:   { ...sceneStore.animRotate },
+      dissolve: { ...sceneStore.animDissolve },
+      explode:  { ...sceneStore.animExplode },
+      wave:     { ...sceneStore.animWave },
+      pulse:    { ...sceneStore.animPulse },
+      glow:     { ...sceneStore.animGlow },
+    }
+  }
 
   async function initScene() {
     if (!canvasRef.value) return
@@ -98,6 +114,10 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
       wind:  { enabled: sceneStore.windEnabled,  intensity: sceneStore.windIntensity  },
       float: { enabled: sceneStore.floatEnabled, intensity: sceneStore.floatIntensity }
     })
+
+    const animPreset = sceneStore.animationEnabled ? sceneStore.animationPreset : 'none'
+    prevAnimPreset = animPreset
+    threeScene.setAnimationPreset(animPreset, buildAnimParams())
   }
 
   function updateScene() {
@@ -142,6 +162,16 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
       wind:  { enabled: sceneStore.windEnabled,  intensity: sceneStore.windIntensity  },
       float: { enabled: sceneStore.floatEnabled, intensity: sceneStore.floatIntensity }
     })
+
+    // Animation preset — only re-init when preset ID changes; otherwise just update params
+    const animPreset = sceneStore.animationEnabled ? sceneStore.animationPreset : 'none'
+    const params     = buildAnimParams()
+    if (animPreset !== prevAnimPreset) {
+      threeScene.setAnimationPreset(animPreset, params)
+      prevAnimPreset = animPreset
+    } else {
+      threeScene.updateAnimationParams(params)
+    }
   }
 
   function resetCamera() { threeScene?.resetCamera() }
@@ -177,7 +207,10 @@ export function useThreeScene(canvasRef: Ref<HTMLCanvasElement | null>) {
       sceneStore.fireEnabled, sceneStore.fireIntensity,
       sceneStore.waterEnabled, sceneStore.waterIntensity,
       sceneStore.windEnabled, sceneStore.windIntensity,
-      sceneStore.bgColor
+      sceneStore.bgColor,
+      sceneStore.animationPreset, sceneStore.animationEnabled,
+      sceneStore.animFloat, sceneStore.animRotate, sceneStore.animDissolve,
+      sceneStore.animExplode, sceneStore.animWave, sceneStore.animPulse, sceneStore.animGlow,
     ],
     () => { if (isReady.value) updateScene() },
     { deep: true }

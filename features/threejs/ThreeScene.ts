@@ -1,5 +1,7 @@
 import * as THREE from 'three'
 import { createSolidFromImage, MAT_FRONT, MAT_SIDES, traceSilhouettePath } from './geometry/createSolidMesh'
+import { AnimationController } from './animations/AnimationController'
+import type { AnimationParamsMap } from './animations/types'
 
 export interface MaterialParams {
   metalness?: number
@@ -84,7 +86,21 @@ export class ThreeScene {
     float: { enabled: false, intensity: 0.5 }
   }
 
-  // Animation state
+  // Animation system
+  private animController!: AnimationController
+  private animParams: AnimationParamsMap = {
+    float:    { amplitude: 0.5, speed: 1.0 },
+    rotate:   { speed: 0.5, axisX: false, axisY: true, axisZ: false },
+    dissolve: { amount: 0.0, edgeGlow: 0.6, speed: 0.3, looping: true },
+    explode:  { force: 1.0, spread: 1.5 },
+    wave:     { frequency: 2.0, amplitude: 0.4 },
+    pulse:    { intensity: 0.15, speed: 1.0 },
+    glow:     { color: '#6C63FF', intensity: 0.5, speed: 1.0 },
+  }
+  private userScale: number = 1
+  private lastFrameTime: number = 0
+
+  // RAF + input state
   private animationId: number = 0
   private isDragging = false
   private prevMouse = { x: 0, y: 0 }
@@ -176,6 +192,12 @@ export class ThreeScene {
     shadowPlane.receiveShadow = true
     this.scene.add(shadowPlane)
 
+    this.animController = new AnimationController({
+      meshGroup: this.meshGroup ?? new THREE.Group(),
+      mainMesh:  this.mainMesh,
+      scene:     this.scene,
+    })
+
     this.createDefaultCube()
     this.animate()
   }
@@ -227,6 +249,8 @@ export class ThreeScene {
     const prevGroupScale = this.meshGroup?.scale.x ?? 0
 
     if (this.meshGroup) {
+      // Let animation preset clean up resources tied to the old mesh BEFORE disposal
+      this.animController?.cleanupForRebuild()
       this.scene.remove(this.meshGroup)
       this.disposeMeshGroup()
     }
@@ -270,6 +294,15 @@ export class ThreeScene {
 
     this.applyMaterialParamsToMesh(this.matParams)
     this.applyOutlineToMesh(this.outlineParams)
+
+    // Re-init animation preset with the new mesh/group
+    if (this.meshGroup) {
+      this.animController?.onMeshChanged({
+        meshGroup: this.meshGroup,
+        mainMesh:  this.mainMesh,
+        scene:     this.scene,
+      })
+    }
   }
 
   private makeFrontMaterial(): THREE.MeshPhysicalMaterial {
@@ -340,7 +373,7 @@ export class ThreeScene {
     if (!this.meshGroup) return
     if (p.position) this.basePos.set(p.position.x, p.position.y, p.position.z)
     if (p.rotation) this.baseRot.set(p.rotation.x, p.rotation.y, p.rotation.z)
-    if (p.scale !== undefined) this.meshGroup.scale.setScalar(p.scale)
+    if (p.scale !== undefined) { this.userScale = p.scale; this.meshGroup.scale.setScalar(p.scale) }
   }
 
   // ─── Lights ─────────────────────────────────────────────────
@@ -511,6 +544,19 @@ export class ThreeScene {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
   }
 
+  // ─── Animation presets ──────────────────────────────────────
+
+  setAnimationPreset(id: string, params: AnimationParamsMap): void {
+    this.animParams = params
+    if (this.meshGroup) {
+      this.animController.setPreset(id, params)
+    }
+  }
+
+  updateAnimationParams(params: AnimationParamsMap): void {
+    this.animParams = params
+  }
+
   // ─── Dispose ────────────────────────────────────────────────
 
   private disposeMeshGroup(): void {
@@ -529,6 +575,7 @@ export class ThreeScene {
   dispose(): void {
     this.isDisposed = true
     cancelAnimationFrame(this.animationId)
+    this.animController?.cleanup()
     if (this.meshGroup) { this.scene.remove(this.meshGroup); this.disposeMeshGroup() }
     this.currentTexture?.dispose()
     this.silhouettePath = null
@@ -542,7 +589,9 @@ export class ThreeScene {
     if (this.isDisposed) return
     this.animationId = requestAnimationFrame(() => this.animate())
 
-    const t = performance.now() * 0.001
+    const now   = performance.now() * 0.001
+    const delta = this.lastFrameTime > 0 ? Math.min(now - this.lastFrameTime, 0.1) : 0.016
+    this.lastFrameTime = now
 
     // Default cube spin
     if (this.defaultCube) {
@@ -564,44 +613,50 @@ export class ThreeScene {
         this.hoverTilt.y += (targetY - this.hoverTilt.y) * 0.04
       }
 
-      // ── Effect offsets
+      // ── Legacy effect offsets
       let oy  = 0   // position Y offset
       let orx = 0   // rotation X offset
       let orz = 0   // rotation Z offset
 
       if (this.effects.float.enabled) {
-        oy += Math.sin(t * 1.1) * 0.07 * this.effects.float.intensity
+        oy += Math.sin(now * 1.1) * 0.07 * this.effects.float.intensity
       }
-
       if (this.effects.wind.enabled) {
         const i = this.effects.wind.intensity
-        orz += (Math.sin(t * 2.2) * 0.022 + Math.sin(t * 5.8) * 0.008) * i
-        oy  += Math.sin(t * 1.6) * 0.018 * i
+        orz += (Math.sin(now * 2.2) * 0.022 + Math.sin(now * 5.8) * 0.008) * i
+        oy  += Math.sin(now * 1.6) * 0.018 * i
       }
-
       if (this.effects.water.enabled) {
         const i = this.effects.water.intensity
-        oy  += (Math.sin(t * 0.85) * 0.055 + Math.sin(t * 2.1) * 0.015) * i
-        orx += Math.sin(t * 1.4) * 0.014 * i
+        oy  += (Math.sin(now * 0.85) * 0.055 + Math.sin(now * 2.1) * 0.015) * i
+        orx += Math.sin(now * 1.4) * 0.014 * i
       }
+
+      // ── Animation preset
+      const anim = this.animController.update(this.animParams, delta, now)
 
       // ── Apply final transform
       this.meshGroup.position.set(
-        this.basePos.x,
-        this.basePos.y + oy,
-        this.basePos.z
+        this.basePos.x + anim.posOffset.x,
+        this.basePos.y + oy + anim.posOffset.y,
+        this.basePos.z + anim.posOffset.z
       )
       this.meshGroup.rotation.set(
-        this.baseRot.x + orx + this.hoverTilt.x,
-        this.baseRot.y + this.autoRotAngle,
-        this.baseRot.z + orz + this.hoverTilt.y
+        this.baseRot.x + orx + this.hoverTilt.x + anim.rotOffset.x,
+        this.baseRot.y + this.autoRotAngle       + anim.rotOffset.y,
+        this.baseRot.z + orz + this.hoverTilt.y  + anim.rotOffset.z
       )
+
+      // Pulse / scale-affecting presets override user scale
+      if (Math.abs(anim.scaleMult - 1) > 0.001) {
+        this.meshGroup.scale.setScalar(this.userScale * anim.scaleMult)
+      }
 
       // ── Fire: flickering warm point light
       if (this.effects.fire.enabled) {
         const fi = this.effects.fire.intensity
-        this.fireLight.intensity = (1.0 + Math.sin(t * 13.7) * 0.45 + Math.sin(t * 7.3) * 0.2) * fi * 1.8
-        this.fireLight.position.y = this.basePos.y + 0.6 + Math.sin(t * 8) * 0.12
+        this.fireLight.intensity = (1.0 + Math.sin(now * 13.7) * 0.45 + Math.sin(now * 7.3) * 0.2) * fi * 1.8
+        this.fireLight.position.y = this.basePos.y + 0.6 + Math.sin(now * 8) * 0.12
       } else {
         this.fireLight.intensity = 0
       }
@@ -609,8 +664,8 @@ export class ThreeScene {
       // ── Water: cool oscillating point light
       if (this.effects.water.enabled) {
         const wi = this.effects.water.intensity
-        this.waterLight.intensity = (0.6 + Math.sin(t * 1.8) * 0.35) * wi * 1.4
-        this.waterLight.position.x = Math.sin(t * 0.7) * 1.5
+        this.waterLight.intensity = (0.6 + Math.sin(now * 1.8) * 0.35) * wi * 1.4
+        this.waterLight.position.x = Math.sin(now * 0.7) * 1.5
       } else {
         this.waterLight.intensity = 0
       }

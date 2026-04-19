@@ -168,28 +168,151 @@
       <PanelSection title="Animation" icon="animation" :open="false">
         <div class="space-y-3">
 
+          <!-- Preset picker -->
+          <div class="subsection-label">Preset</div>
+          <div class="anim-preset-grid">
+            <button
+              v-for="p in animPresets"
+              :key="p.id"
+              class="anim-chip"
+              :class="{ active: sceneStore.animationPreset === p.id }"
+              @click="sceneStore.setAnimationPreset(p.id)"
+            >
+              <span class="anim-chip-icon">{{ p.icon }}</span>
+              <span>{{ p.label }}</span>
+            </button>
+          </div>
+
+          <!-- Enable + Reset row -->
+          <div class="flex items-center justify-between mt-1">
+            <ToggleRow
+              label="Enable"
+              :value="sceneStore.animationEnabled"
+              @toggle="sceneStore.setAnimationEnabled(!sceneStore.animationEnabled)"
+            />
+            <button
+              class="anim-reset-btn"
+              @click="sceneStore.setAnimationPreset('none'); sceneStore.setAnimationEnabled(false)"
+            >Reset</button>
+          </div>
+
+          <!-- ── Per-preset params ───────────────────────────── -->
+          <template v-if="sceneStore.animationEnabled && sceneStore.animationPreset !== 'none'">
+            <UiSeparator class="!my-2" />
+
+            <!-- Float -->
+            <template v-if="sceneStore.animationPreset === 'float'">
+              <UiSlider label="Amplitude" :model-value="sceneStore.animFloat.amplitude"
+                :min="0.1" :max="2" :step="0.05" :decimals="2"
+                @update:model-value="sceneStore.animFloat.amplitude = $event" />
+              <UiSlider label="Speed" :model-value="sceneStore.animFloat.speed"
+                :min="0.1" :max="3" :step="0.1" :decimals="1"
+                @update:model-value="sceneStore.animFloat.speed = $event" />
+            </template>
+
+            <!-- Rotate -->
+            <template v-if="sceneStore.animationPreset === 'rotate'">
+              <UiSlider label="Speed" :model-value="sceneStore.animRotate.speed"
+                :min="0.1" :max="5" :step="0.1" :decimals="1"
+                @update:model-value="sceneStore.animRotate.speed = $event" />
+              <div class="anim-axis-row">
+                <span class="text-xs text-text-muted">Axis</span>
+                <div class="flex gap-2">
+                  <button class="axis-btn" :class="{ active: sceneStore.animRotate.axisX }" @click="sceneStore.animRotate.axisX = !sceneStore.animRotate.axisX">X</button>
+                  <button class="axis-btn" :class="{ active: sceneStore.animRotate.axisY }" @click="sceneStore.animRotate.axisY = !sceneStore.animRotate.axisY">Y</button>
+                  <button class="axis-btn" :class="{ active: sceneStore.animRotate.axisZ }" @click="sceneStore.animRotate.axisZ = !sceneStore.animRotate.axisZ">Z</button>
+                </div>
+              </div>
+            </template>
+
+            <!-- Dissolve -->
+            <template v-if="sceneStore.animationPreset === 'dissolve'">
+              <ToggleRow label="Loop" :value="sceneStore.animDissolve.looping"
+                @toggle="sceneStore.animDissolve.looping = !sceneStore.animDissolve.looping" />
+              <UiSlider v-if="!sceneStore.animDissolve.looping"
+                label="Amount" :model-value="sceneStore.animDissolve.amount"
+                :min="0" :max="1" :step="0.01" :decimals="2"
+                @update:model-value="sceneStore.animDissolve.amount = $event" />
+              <UiSlider v-if="sceneStore.animDissolve.looping"
+                label="Speed" :model-value="sceneStore.animDissolve.speed"
+                :min="0.05" :max="1" :step="0.05" :decimals="2"
+                @update:model-value="sceneStore.animDissolve.speed = $event" />
+              <UiSlider label="Edge Glow" :model-value="sceneStore.animDissolve.edgeGlow"
+                :min="0" :max="1" :step="0.05" :decimals="2"
+                @update:model-value="sceneStore.animDissolve.edgeGlow = $event" />
+            </template>
+
+            <!-- Explode -->
+            <template v-if="sceneStore.animationPreset === 'explode'">
+              <UiSlider label="Force" :model-value="sceneStore.animExplode.force"
+                :min="0.1" :max="3" :step="0.1" :decimals="1"
+                @update:model-value="sceneStore.animExplode.force = $event" />
+              <UiSlider label="Spread" :model-value="sceneStore.animExplode.spread"
+                :min="0.2" :max="4" :step="0.1" :decimals="1"
+                @update:model-value="sceneStore.animExplode.spread = $event" />
+            </template>
+
+            <!-- Wave -->
+            <template v-if="sceneStore.animationPreset === 'wave'">
+              <UiSlider label="Frequency" :model-value="sceneStore.animWave.frequency"
+                :min="0.5" :max="8" :step="0.25" :decimals="2"
+                @update:model-value="sceneStore.animWave.frequency = $event" />
+              <UiSlider label="Amplitude" :model-value="sceneStore.animWave.amplitude"
+                :min="0.1" :max="2" :step="0.05" :decimals="2"
+                @update:model-value="sceneStore.animWave.amplitude = $event" />
+            </template>
+
+            <!-- Pulse -->
+            <template v-if="sceneStore.animationPreset === 'pulse'">
+              <UiSlider label="Intensity" :model-value="sceneStore.animPulse.intensity"
+                :min="0.02" :max="0.5" :step="0.01" :decimals="2"
+                @update:model-value="sceneStore.animPulse.intensity = $event" />
+              <UiSlider label="Speed" :model-value="sceneStore.animPulse.speed"
+                :min="0.2" :max="4" :step="0.1" :decimals="1"
+                @update:model-value="sceneStore.animPulse.speed = $event" />
+            </template>
+
+            <!-- Glow -->
+            <template v-if="sceneStore.animationPreset === 'glow'">
+              <div class="flex items-center justify-between">
+                <span class="text-xs text-text-muted">Glow Color</span>
+                <label class="color-swatch-label">
+                  <div class="color-preview" :style="{ background: sceneStore.animGlow.color }" />
+                  <input type="color" :value="sceneStore.animGlow.color" class="color-picker-hidden"
+                    @input="sceneStore.animGlow.color = ($event.target as HTMLInputElement).value" />
+                </label>
+              </div>
+              <UiSlider label="Intensity" :model-value="sceneStore.animGlow.intensity"
+                :min="0.05" :max="1" :step="0.05" :decimals="2"
+                @update:model-value="sceneStore.animGlow.intensity = $event" />
+              <UiSlider label="Speed" :model-value="sceneStore.animGlow.speed"
+                :min="0.2" :max="4" :step="0.1" :decimals="1"
+                @update:model-value="sceneStore.animGlow.speed = $event" />
+            </template>
+          </template>
+
+          <UiSeparator class="!my-2" />
+
+          <!-- ── Basic (legacy) ─────────────────────────────── -->
+          <div class="subsection-label">Basic</div>
+
           <ToggleRow label="Auto Rotate" :value="sceneStore.autoRotate" @toggle="sceneStore.setAutoRotate(!sceneStore.autoRotate)" />
           <UiSlider v-if="sceneStore.autoRotate"
-            label="Speed"
-            :model-value="sceneStore.autoRotateSpeed"
+            label="Speed" :model-value="sceneStore.autoRotateSpeed"
             :min="0.1" :max="5" :step="0.1" :decimals="1"
             @update:model-value="sceneStore.setAutoRotateSpeed($event)"
           />
 
-          <UiSeparator class="!my-2" />
-
           <ToggleRow label="Float" :value="sceneStore.floatEnabled" @toggle="sceneStore.setFloatEnabled(!sceneStore.floatEnabled)" />
           <UiSlider v-if="sceneStore.floatEnabled"
-            label="Intensity"
-            :model-value="sceneStore.floatIntensity"
+            label="Intensity" :model-value="sceneStore.floatIntensity"
             :min="0.1" :max="2" :step="0.1" :decimals="1"
             @update:model-value="sceneStore.setFloatIntensity($event)"
           />
 
-          <UiSeparator class="!my-2" />
-
           <ToggleRow label="Hover Reaction" :value="sceneStore.hoverEnabled" @toggle="sceneStore.setHoverEnabled(!sceneStore.hoverEnabled)" />
           <p v-if="sceneStore.hoverEnabled" class="hint-text">Object tilts toward cursor</p>
+
         </div>
       </PanelSection>
 
@@ -275,6 +398,17 @@ const materialPresets = [
   { id: 'glass',   label: 'Glass'   },
   { id: 'matte',   label: 'Matte'   },
   { id: 'glossy',  label: 'Glossy'  }
+]
+
+const animPresets = [
+  { id: 'none',    label: 'None',    icon: '○' },
+  { id: 'float',   label: 'Float',   icon: '↕' },
+  { id: 'rotate',  label: 'Rotate',  icon: '↻' },
+  { id: 'dissolve',label: 'Dissolve',icon: '◌' },
+  { id: 'explode', label: 'Explode', icon: '✦' },
+  { id: 'wave',    label: 'Wave',    icon: '≋' },
+  { id: 'pulse',   label: 'Pulse',   icon: '◎' },
+  { id: 'glow',    label: 'Glow',    icon: '✧' },
 ]
 
 const bgPresets = ['#0A0A0F', '#FFFFFF', '#F5F5F0', '#1A1A2E', '#0D1B2A', '#2D1B3D']
@@ -536,4 +670,86 @@ export const PanelSection = defineComponent({
 }
 
 .bg-preset-btn:hover { transform: scale(1.15); }
+
+/* ── Animation presets ─── */
+.anim-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 4px;
+}
+
+.anim-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 4px;
+  font-size: 10px;
+  border-radius: 7px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.03);
+  color: #6B6B8A;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+.anim-chip-icon {
+  font-size: 13px;
+  line-height: 1;
+}
+
+.anim-chip:hover {
+  border-color: rgba(108,99,255,0.3);
+  color: #B0B0CC;
+}
+
+.anim-chip.active {
+  background: rgba(108,99,255,0.2);
+  border-color: rgba(108,99,255,0.55);
+  color: #9B8FF7;
+}
+
+.anim-reset-btn {
+  font-size: 10px;
+  color: #6B6B8A;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 5px;
+  padding: 3px 10px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+.anim-reset-btn:hover {
+  color: #B0B0CC;
+  border-color: rgba(255,255,255,0.15);
+}
+
+.anim-axis-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.axis-btn {
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.04);
+  color: #6B6B8A;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+.axis-btn.active {
+  background: rgba(108,99,255,0.22);
+  border-color: rgba(108,99,255,0.5);
+  color: #9B8FF7;
+}
+.axis-btn:hover:not(.active) {
+  border-color: rgba(108,99,255,0.25);
+  color: #B0B0CC;
+}
 </style>

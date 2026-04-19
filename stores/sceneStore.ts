@@ -48,6 +48,16 @@ export interface SceneState {
   windIntensity: number
   // Scene
   bgColor: string
+  // Animation presets
+  animationPreset: string
+  animationEnabled: boolean
+  animFloat:    { amplitude: number; speed: number }
+  animRotate:   { speed: number; axisX: boolean; axisY: boolean; axisZ: boolean }
+  animDissolve: { amount: number; edgeGlow: number; speed: number; looping: boolean }
+  animExplode:  { force: number; spread: number }
+  animWave:     { frequency: number; amplitude: number }
+  animPulse:    { intensity: number; speed: number }
+  animGlow:     { color: string; intensity: number; speed: number }
 }
 
 const defaultState = (): SceneState => ({
@@ -81,7 +91,16 @@ const defaultState = (): SceneState => ({
   waterIntensity: 0.5,
   windEnabled: false,
   windIntensity: 0.5,
-  bgColor: '#0A0A0F'
+  bgColor: '#0A0A0F',
+  animationPreset: 'none',
+  animationEnabled: false,
+  animFloat:    { amplitude: 0.5, speed: 1.0 },
+  animRotate:   { speed: 0.5, axisX: false, axisY: true, axisZ: false },
+  animDissolve: { amount: 0.0, edgeGlow: 0.6, speed: 0.3, looping: true },
+  animExplode:  { force: 1.0, spread: 1.5 },
+  animWave:     { frequency: 2.0, amplitude: 0.4 },
+  animPulse:    { intensity: 0.15, speed: 1.0 },
+  animGlow:     { color: '#6C63FF', intensity: 0.5, speed: 1.0 },
 })
 
 const MATERIAL_PRESETS: Record<string, Partial<SceneState>> = {
@@ -152,6 +171,9 @@ export const useSceneStore = defineStore('scene', {
     setWindIntensity(value: number) { this.windIntensity = Math.max(0.1, Math.min(1, value)) },
 
     setBgColor(value: string) { this.bgColor = value },
+
+    setAnimationPreset(value: string)  { this.animationPreset  = value },
+    setAnimationEnabled(value: boolean) { this.animationEnabled = value },
 
     resetScene() {
       const d = defaultState()
