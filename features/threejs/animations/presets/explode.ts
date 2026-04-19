@@ -2,83 +2,68 @@ import * as THREE from 'three'
 import type { AnimationPreset, AnimationParamsMap, AnimationTarget, AnimationOutput } from '../types'
 import { ZERO_OUTPUT } from '../types'
 
-function makeSpriteTex(): THREE.CanvasTexture {
-  const c = document.createElement('canvas')
-  c.width = c.height = 64
-  const ctx = c.getContext('2d')!
-  const g = ctx.createRadialGradient(32, 32, 0, 32, 32, 32)
-  g.addColorStop(0,    'rgba(210,190,255,1)')
-  g.addColorStop(0.35, 'rgba(140,100,255,0.75)')
-  g.addColorStop(1,    'rgba(80,60,200,0)')
-  ctx.fillStyle = g
-  ctx.fillRect(0, 0, 64, 64)
-  return new THREE.CanvasTexture(c)
-}
-
-function getMeshMats(mesh: THREE.Mesh): THREE.Material[] {
-  return Array.isArray(mesh.material) ? mesh.material : [mesh.material]
-}
+// Triangles grouped into one flying chunk
+const TRIS_PER_CHUNK = 4
 
 export const explodePreset: AnimationPreset = {
   id: 'explode',
 
   init(target, _params) {
     if (!target.mainMesh) return
-    const geo     = target.mainMesh.geometry as THREE.BufferGeometry
-    const posAttr = geo.attributes.position as THREE.BufferAttribute
-    const stride  = Math.max(1, Math.floor(posAttr.count / 512))
-    const count   = Math.floor(posAttr.count / stride)
+    const origGeo = target.mainMesh.geometry as THREE.BufferGeometry
 
-    const orig: Float32Array = new Float32Array(count * 3)
-    const vels: Array<{ x: number; y: number; z: number }> = []
+    // Non-indexed so every triangle has independent vertices we can move freely
+    const geo = origGeo.toNonIndexed()
+    const posA = geo.attributes.position as THREE.BufferAttribute
+    const triCount = Math.floor(posA.count / 3)
 
-    for (let i = 0; i < count; i++) {
-      const vi = i * stride
-      const x = posAttr.getX(vi), y = posAttr.getY(vi), z = posAttr.getZ(vi)
-      orig[i * 3] = x; orig[i * 3 + 1] = y; orig[i * 3 + 2] = z
-      const len = Math.sqrt(x * x + y * y + z * z) || 1
-      vels.push({
-        x: x / len + (Math.random() - 0.5) * 0.8,
-        y: y / len + (Math.random() - 0.5) * 0.8 + 0.15,
-        z: Math.random() * 1.0 + 0.1,
-      })
+    const orig = new Float32Array(posA.array as Float32Array)
+    const vels = new Float32Array(posA.count * 3)
+
+    for (let tri = 0; tri < triCount; tri += TRIS_PER_CHUNK) {
+      const end = Math.min(tri + TRIS_PER_CHUNK, triCount)
+
+      // Chunk centroid
+      let cx = 0, cy = 0, cz = 0
+      let n = 0
+      for (let t = tri; t < end; t++) {
+        for (let v = 0; v < 3; v++) {
+          const i = (t * 3 + v) * 3
+          cx += orig[i]; cy += orig[i + 1]; cz += orig[i + 2]
+          n++
+        }
+      }
+      cx /= n; cy /= n; cz /= n
+
+      // Outward velocity from centroid + random scatter
+      const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1
+      const vx = cx / len + (Math.random() - 0.5) * 2.0
+      const vy = cy / len + (Math.random() - 0.5) * 2.0 + 0.2
+      const vz = Math.random() * 2.0 + 0.3
+
+      // All vertices in chunk share the same velocity (chunk moves as one piece)
+      for (let t = tri; t < end; t++) {
+        for (let v = 0; v < 3; v++) {
+          const i = (t * 3 + v) * 3
+          vels[i] = vx; vels[i + 1] = vy; vels[i + 2] = vz
+        }
+      }
     }
 
-    const ptsGeo = new THREE.BufferGeometry()
-    ptsGeo.setAttribute('position', new THREE.BufferAttribute(orig.slice(), 3))
+    target.mainMesh.geometry = geo
 
-    const ptsMat = new THREE.PointsMaterial({
-      size:        0.055,
-      map:         makeSpriteTex(),
-      transparent: true,
-      depthWrite:  false,
-      blending:    THREE.AdditiveBlending,
-      color:       0x9880FF,
-      opacity:     0,
-    })
-
-    const points = new THREE.Points(ptsGeo, ptsMat)
-    target.meshGroup.add(points)
-
-    // Save original material transparent/opacity state so we can cross-fade
-    const mats = getMeshMats(target.mainMesh)
     const ud = target.mainMesh.userData
-    ud._explodeOrigTransparent = mats.map(m => (m as THREE.MeshPhysicalMaterial).transparent)
-    ud._explodeOrigOpacity     = mats.map(m => (m as THREE.MeshPhysicalMaterial).opacity)
-    mats.forEach(m => { (m as THREE.MeshPhysicalMaterial).transparent = true })
-
-    ud._explodePoints = points
-    ud._explodeVels   = vels
-    ud._explodeOrig   = orig
-    ud._explodeProg   = 0
-    ud._explodeDir    = 1
+    ud._explodeOrigGeo = origGeo
+    ud._explodeOrig    = orig
+    ud._explodeVels    = vels
+    ud._explodeProg    = 0
+    ud._explodeDir     = 1
   },
 
   update(target, params, delta): AnimationOutput {
     if (!target.mainMesh) return ZERO_OUTPUT
-    const ud     = target.mainMesh.userData
-    const points = ud._explodePoints as THREE.Points | undefined
-    if (!points) return ZERO_OUTPUT
+    const ud = target.mainMesh.userData
+    if (!ud._explodeOrig) return ZERO_OUTPUT
 
     let prog = (ud._explodeProg as number) ?? 0
     let dir  = (ud._explodeDir  as number) ?? 1
@@ -89,62 +74,41 @@ export const explodePreset: AnimationPreset = {
     ud._explodeProg = prog
     ud._explodeDir  = dir
 
-    // Cubic ease in-out
     const eased = prog < 0.5
       ? 4 * prog * prog * prog
       : 1 - Math.pow(-2 * prog + 2, 3) / 2
 
-    const force = params.explode.spread
-    const orig  = ud._explodeOrig as Float32Array
-    const vels  = ud._explodeVels as Array<{ x: number; y: number; z: number }>
-    const posA  = points.geometry.attributes.position as THREE.BufferAttribute
+    const spread = params.explode.spread
+    const orig   = ud._explodeOrig as Float32Array
+    const vels   = ud._explodeVels as Float32Array
+    const posA   = (target.mainMesh.geometry as THREE.BufferGeometry)
+                     .attributes.position as THREE.BufferAttribute
 
-    for (let i = 0; i < vels.length; i++) {
-      const v = vels[i]
+    for (let i = 0; i < posA.count; i++) {
+      const j = i * 3
       posA.setXYZ(i,
-        orig[i * 3]     + v.x * force * eased,
-        orig[i * 3 + 1] + v.y * force * eased,
-        orig[i * 3 + 2] + v.z * force * eased,
+        orig[j]     + vels[j]     * spread * eased,
+        orig[j + 1] + vels[j + 1] * spread * eased,
+        orig[j + 2] + vels[j + 2] * spread * eased,
       )
     }
     posA.needsUpdate = true
 
-    // Cross-fade: mesh fades out as particles fly outward, returns as they contract
-    const origOpacities = ud._explodeOrigOpacity as number[]
-    getMeshMats(target.mainMesh).forEach((m, i) => {
-      (m as THREE.MeshPhysicalMaterial).opacity = origOpacities[i] * (1 - eased)
-    })
-    target.mainMesh.visible = eased < 0.99
-
-    ;(points.material as THREE.PointsMaterial).opacity = eased * 0.9
     return ZERO_OUTPUT
   },
 
   cleanup(target) {
     if (!target.mainMesh) return
-    const ud     = target.mainMesh.userData
-    const points = ud._explodePoints as THREE.Points | undefined
-    if (points) {
-      target.meshGroup.remove(points)
-      ;(points.material as THREE.PointsMaterial).map?.dispose()
-      ;(points.material as THREE.Material).dispose()
-      points.geometry.dispose()
+    const ud = target.mainMesh.userData
+
+    // Restore original indexed geometry and dispose the non-indexed copy
+    const origGeo = ud._explodeOrigGeo as THREE.BufferGeometry | undefined
+    if (origGeo) {
+      target.mainMesh.geometry.dispose()
+      target.mainMesh.geometry = origGeo
     }
 
-    // Restore mesh material state
-    const origTransparent = ud._explodeOrigTransparent as boolean[]  | undefined
-    const origOpacities   = ud._explodeOrigOpacity     as number[]   | undefined
-    if (origTransparent && origOpacities) {
-      getMeshMats(target.mainMesh).forEach((m, i) => {
-        const mat = m as THREE.MeshPhysicalMaterial
-        mat.transparent = origTransparent[i]
-        mat.opacity     = origOpacities[i]
-      })
-    }
-    target.mainMesh.visible = true
-
-    delete ud._explodePoints; delete ud._explodeVels
-    delete ud._explodeOrig;   delete ud._explodeProg; delete ud._explodeDir
-    delete ud._explodeOrigTransparent; delete ud._explodeOrigOpacity
+    delete ud._explodeOrigGeo; delete ud._explodeOrig
+    delete ud._explodeVels;    delete ud._explodeProg; delete ud._explodeDir
   },
 }
