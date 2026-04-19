@@ -19,7 +19,7 @@ export const ZERO_OUTPUT: AnimationOutput = {
 export interface FloatParams    { amplitude: number; speed: number }
 export interface RotateParams   { speed: number; axisX: boolean; axisY: boolean; axisZ: boolean }
 export interface DissolveParams { amount: number; edgeGlow: number; speed: number; looping: boolean }
-export interface ExplodeParams  { force: number; spread: number }
+export interface ExplodeParams  { force: number; spread: number; chunkSize: number; scatter: number }
 export interface WaveParams     { frequency: number; amplitude: number }
 export interface PulseParams    { intensity: number; speed: number }
 export interface GlowParams     { color: string; intensity: number; speed: number }

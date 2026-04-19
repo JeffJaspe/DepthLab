@@ -250,6 +250,12 @@
               <UiSlider label="Spread" :model-value="sceneStore.animExplode.spread"
                 :min="0.2" :max="4" :step="0.1" :decimals="1"
                 @update:model-value="sceneStore.animExplode.spread = $event" />
+              <UiSlider label="Chunk Size" :model-value="sceneStore.animExplode.chunkSize"
+                :min="1" :max="30" :step="1" :decimals="0"
+                @update:model-value="sceneStore.animExplode.chunkSize = $event" />
+              <UiSlider label="Scatter" :model-value="sceneStore.animExplode.scatter"
+                :min="0" :max="1" :step="0.05" :decimals="2"
+                @update:model-value="sceneStore.animExplode.scatter = $event" />
             </template>
 
             <!-- Wave -->

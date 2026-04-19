@@ -97,7 +97,7 @@ const defaultState = (): SceneState => ({
   animFloat:    { amplitude: 0.5, speed: 1.0 },
   animRotate:   { speed: 0.5, axisX: false, axisY: true, axisZ: false },
   animDissolve: { amount: 0.0, edgeGlow: 0.6, speed: 0.3, looping: true },
-  animExplode:  { force: 1.0, spread: 1.5 },
+  animExplode:  { force: 1.0, spread: 1.5, chunkSize: 4, scatter: 0.5 },
   animWave:     { frequency: 2.0, amplitude: 0.4 },
   animPulse:    { intensity: 0.15, speed: 1.0 },
   animGlow:     { color: '#6C63FF', intensity: 0.5, speed: 1.0 },
