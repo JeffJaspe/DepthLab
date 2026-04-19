@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { createSolidFromImage, MAT_FRONT } from './geometry/createSolidMesh'
 
 export interface MaterialParams {
   metalness?: number
@@ -191,7 +192,6 @@ export class ThreeScene {
   private buildMesh(isRebuild: boolean): void {
     const prevGroupScale = this.meshGroup?.scale.x ?? 0
 
-    // Tear down old group
     if (this.meshGroup) {
       this.scene.remove(this.meshGroup)
       this.disposeMeshGroup()
@@ -211,56 +211,19 @@ export class ThreeScene {
     const d = this.currentThickness
 
     if (d < 0.001) {
+      // Flat plane — no depth
       const geo = new THREE.PlaneGeometry(w, h, 1, 1)
       this.mainMesh = new THREE.Mesh(geo, this.makeFrontMaterial())
+      this.mainMesh.castShadow    = true
+      this.mainMesh.receiveShadow = true
     } else {
-      // Front face at z = +d/2
-      const frontGeo = new THREE.PlaneGeometry(w, h, 1, 1)
-      this.mainMesh = new THREE.Mesh(frontGeo, this.makeFrontMaterial())
-      this.mainMesh.position.z = d / 2
-
-      // Back face at z = -d/2 (dark, BackSide)
-      const backMat = new THREE.MeshStandardMaterial({
-        map: this.currentTexture!,
-        alphaTest: 0.05,
-        transparent: true,
-        color: new THREE.Color(0x0C0C12),
-        roughness: 0.9,
-        side: THREE.BackSide
-      })
-      const backMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 1, 1), backMat)
-      backMesh.position.z = -d / 2
-      backMesh.receiveShadow = true
-      this.meshGroup.add(backMesh)
-
-      // Interior edge-fill slices — solid dark planes clipped by PNG alpha.
-      // These fill the hollow gap visible when viewing from the side.
-      const numInterior = Math.max(1, Math.min(6, Math.ceil(d / 0.08)))
-      const edgeColor = new THREE.Color(0x111118)
-      for (let i = 1; i <= numInterior; i++) {
-        const t = i / (numInterior + 1)
-        const z = d * (t - 0.5)
-        const fillMat = new THREE.MeshStandardMaterial({
-          map: this.currentTexture!,
-          alphaTest: 0.05,
-          transparent: true,
-          color: edgeColor,
-          roughness: 0.9,
-          side: THREE.DoubleSide
-        })
-        const fillMesh = new THREE.Mesh(new THREE.PlaneGeometry(w, h, 1, 1), fillMat)
-        fillMesh.position.z = z
-        this.meshGroup.add(fillMesh)
-      }
+      // Solid BoxGeometry: proper front/back/side faces, alpha-clipped to PNG silhouette
+      this.mainMesh = createSolidFromImage(this.currentTexture, w, h, d, this.matParams)
     }
 
-    this.mainMesh.receiveShadow = true
-    this.mainMesh.castShadow = true
     this.meshGroup.add(this.mainMesh)
-
     this.scene.add(this.meshGroup)
 
-    // On first load, start at scale 0 for GSAP entrance
     if (!isRebuild) {
       this.meshGroup.scale.setScalar(0)
       this.hasLoaded = true
@@ -268,7 +231,6 @@ export class ThreeScene {
       this.meshGroup.scale.setScalar(prevGroupScale)
     }
 
-    // Re-apply stored params after rebuild
     this.applyMaterialParamsToMesh(this.matParams)
     this.applyOutlineToMesh(this.outlineParams)
   }
@@ -292,7 +254,9 @@ export class ThreeScene {
 
   private getFrontMat(): THREE.MeshPhysicalMaterial | null {
     if (!this.mainMesh) return null
-    return this.mainMesh.material as THREE.MeshPhysicalMaterial
+    const mats = this.mainMesh.material
+    if (Array.isArray(mats)) return mats[MAT_FRONT] as THREE.MeshPhysicalMaterial
+    return mats as THREE.MeshPhysicalMaterial
   }
 
   private applyMaterialParamsToMesh(p: MaterialParams): void {
@@ -501,7 +465,10 @@ export class ThreeScene {
         child.geometry.dispose()
         const mats = Array.isArray(child.material) ? child.material : [child.material]
         mats.forEach((m: THREE.Material) => {
-          if ((m as THREE.MeshStandardMaterial).map) (m as THREE.MeshStandardMaterial).map!.dispose()
+          // Only dispose CanvasTextures (edge maps created per-build).
+          // currentTexture (the uploaded image) is managed separately in dispose().
+          const map = (m as THREE.MeshStandardMaterial).map
+          if (map && map !== this.currentTexture) map.dispose()
           m.dispose()
         })
       }
@@ -512,6 +479,7 @@ export class ThreeScene {
     this.isDisposed = true
     cancelAnimationFrame(this.animationId)
     if (this.meshGroup) { this.scene.remove(this.meshGroup); this.disposeMeshGroup() }
+    this.currentTexture?.dispose()
     if (this.defaultCube) { this.scene.remove(this.defaultCube); this.defaultCube.geometry.dispose() }
     this.renderer.dispose()
   }
