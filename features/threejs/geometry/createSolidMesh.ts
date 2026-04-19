@@ -61,10 +61,13 @@ function buildEdgeTextures(texture: THREE.Texture): {
 function makeSideMat(edgeTex: THREE.CanvasTexture): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     map: edgeTex,
-    alphaTest: 0.1,   // slightly harder clip so side halos don't show
+    // Multiply edge color by a very dark tone so sides are clearly darker than
+    // the front face — this contrast is what makes depth readable at any angle.
+    color: new THREE.Color(0x181820),
+    alphaTest: 0.1,
     transparent: true,
-    roughness: 0.85,
-    metalness: 0.05
+    roughness: 0.95,
+    metalness: 0.0
   })
 }
 

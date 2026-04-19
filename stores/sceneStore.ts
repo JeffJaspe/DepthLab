@@ -61,7 +61,7 @@ const defaultState = (): SceneState => ({
   colorTint: '#ffffff',
   materialPreset: 'custom',
   reflectivity: 0,
-  thickness: 0,
+  thickness: 0.35,
   outlineEnabled: false,
   outlineColor: '#ffffff',
   outlineThickness: 0.04,

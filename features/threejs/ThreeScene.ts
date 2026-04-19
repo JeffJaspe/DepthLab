@@ -89,7 +89,8 @@ export class ThreeScene {
   private autoRotateEnabled = false
   private autoRotateSpeed = 0.5
   private hoverEnabled = false
-  private spherical = { radius: 5, theta: 0, phi: Math.PI / 2 }
+  // Slight offset from dead-centre so box sides are visible on first load
+  private spherical = { radius: 5, theta: 0.18, phi: Math.PI / 2 - 0.14 }
   private canvas: HTMLCanvasElement
   private isDisposed = false
 
@@ -116,11 +117,16 @@ export class ThreeScene {
     this.renderer.toneMappingExposure = 1.0
 
     this.scene.background = new THREE.Color(0x0A0A0F)
-    this.scene.fog = new THREE.FogExp2(0x0A0A0F, 0.04)
+    this.scene.fog = new THREE.FogExp2(0x0A0A0F, 0.02) // lighter fog — don't obscure depth
 
+    // ── Ambient: keep low so directional light creates real contrast
+    this.ambientLight.intensity = 0.35
     this.scene.add(this.ambientLight)
 
-    this.directionalLight.position.set(5, 8, 5)
+    // ── Main key light: angled from upper-left-front so it lights the front face
+    // but leaves the right/bottom sides noticeably darker → reveals depth.
+    this.directionalLight.position.set(2.5, 5, 4)
+    this.directionalLight.intensity = 1.8
     this.directionalLight.castShadow = true
     this.directionalLight.shadow.mapSize.set(2048, 2048)
     this.directionalLight.shadow.camera.near = 0.1
@@ -128,25 +134,45 @@ export class ThreeScene {
     this.directionalLight.shadow.bias = -0.001
     this.scene.add(this.directionalLight)
 
-    const fillLight = new THREE.DirectionalLight(0x8B5CF6, 0.3)
-    fillLight.position.set(-5, -3, -5)
-    this.scene.add(fillLight)
-    this.scene.add(new THREE.HemisphereLight(0x6C63FF, 0x0A0A0F, 0.2))
+    // ── Rim light: cool-blue from the right, low intensity.
+    // Catches the right-side face of the box with a faint blue sheen that
+    // separates it tonally from both the dark side and the lit front.
+    const rimLight = new THREE.DirectionalLight(0x4466cc, 0.55)
+    rimLight.position.set(4, 1, 2)
+    this.scene.add(rimLight)
 
-    // Effect lights (start off)
+    // ── Back fill: subtle purple bounce from below-behind
+    const fillLight = new THREE.DirectionalLight(0x8B5CF6, 0.25)
+    fillLight.position.set(-3, -2, -4)
+    this.scene.add(fillLight)
+
+    this.scene.add(new THREE.HemisphereLight(0x6C63FF, 0x0A0A0F, 0.15))
+
+    // ── Effect lights (start off)
     this.fireLight.position.set(0, 1.2, 1)
     this.scene.add(this.fireLight)
     this.waterLight.position.set(0, -1, 1.5)
     this.scene.add(this.waterLight)
 
-    this.camera.position.set(0, 0, 5)
-    this.camera.lookAt(0, 0, 0)
+    // ── Camera: use spherical so resetCamera() stays consistent
+    this.updateCameraFromSpherical()
 
+    // ── Grid + shadow-receiving ground plane
     const grid = new THREE.GridHelper(20, 20, 0x1A1A24, 0x111118)
     grid.position.y = -2
     ;(grid.material as THREE.Material).opacity = 0.4
     ;(grid.material as THREE.Material).transparent = true
     this.scene.add(grid)
+
+    // Invisible plane that only renders cast shadows — grounds the object
+    const shadowPlane = new THREE.Mesh(
+      new THREE.PlaneGeometry(20, 20),
+      new THREE.ShadowMaterial({ opacity: 0.35, transparent: true })
+    )
+    shadowPlane.rotation.x = -Math.PI / 2
+    shadowPlane.position.y = -2
+    shadowPlane.receiveShadow = true
+    this.scene.add(shadowPlane)
 
     this.createDefaultCube()
     this.animate()
@@ -381,7 +407,7 @@ export class ThreeScene {
   // ─── Camera ─────────────────────────────────────────────────
 
   resetCamera(): void {
-    this.spherical = { radius: 5, theta: 0, phi: Math.PI / 2 }
+    this.spherical = { radius: 5, theta: 0.18, phi: Math.PI / 2 - 0.14 }
     this.updateCameraFromSpherical()
   }
 
