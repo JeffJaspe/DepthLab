@@ -15,6 +15,10 @@ function makeSpriteTex(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(c)
 }
 
+function getMeshMats(mesh: THREE.Mesh): THREE.Material[] {
+  return Array.isArray(mesh.material) ? mesh.material : [mesh.material]
+}
+
 export const explodePreset: AnimationPreset = {
   id: 'explode',
 
@@ -50,12 +54,19 @@ export const explodePreset: AnimationPreset = {
       depthWrite:  false,
       blending:    THREE.AdditiveBlending,
       color:       0x9880FF,
+      opacity:     0,
     })
 
     const points = new THREE.Points(ptsGeo, ptsMat)
     target.meshGroup.add(points)
 
+    // Save original material transparent/opacity state so we can cross-fade
+    const mats = getMeshMats(target.mainMesh)
     const ud = target.mainMesh.userData
+    ud._explodeOrigTransparent = mats.map(m => (m as THREE.MeshPhysicalMaterial).transparent)
+    ud._explodeOrigOpacity     = mats.map(m => (m as THREE.MeshPhysicalMaterial).opacity)
+    mats.forEach(m => { (m as THREE.MeshPhysicalMaterial).transparent = true })
+
     ud._explodePoints = points
     ud._explodeVels   = vels
     ud._explodeOrig   = orig
@@ -97,8 +108,15 @@ export const explodePreset: AnimationPreset = {
       )
     }
     posA.needsUpdate = true
-    ;(points.material as THREE.PointsMaterial).opacity = 0.4 + eased * 0.6
 
+    // Cross-fade: mesh fades out as particles fly outward, returns as they contract
+    const origOpacities = ud._explodeOrigOpacity as number[]
+    getMeshMats(target.mainMesh).forEach((m, i) => {
+      (m as THREE.MeshPhysicalMaterial).opacity = origOpacities[i] * (1 - eased)
+    })
+    target.mainMesh.visible = eased < 0.99
+
+    ;(points.material as THREE.PointsMaterial).opacity = eased * 0.9
     return ZERO_OUTPUT
   },
 
@@ -112,7 +130,21 @@ export const explodePreset: AnimationPreset = {
       ;(points.material as THREE.Material).dispose()
       points.geometry.dispose()
     }
+
+    // Restore mesh material state
+    const origTransparent = ud._explodeOrigTransparent as boolean[]  | undefined
+    const origOpacities   = ud._explodeOrigOpacity     as number[]   | undefined
+    if (origTransparent && origOpacities) {
+      getMeshMats(target.mainMesh).forEach((m, i) => {
+        const mat = m as THREE.MeshPhysicalMaterial
+        mat.transparent = origTransparent[i]
+        mat.opacity     = origOpacities[i]
+      })
+    }
+    target.mainMesh.visible = true
+
     delete ud._explodePoints; delete ud._explodeVels
     delete ud._explodeOrig;   delete ud._explodeProg; delete ud._explodeDir
+    delete ud._explodeOrigTransparent; delete ud._explodeOrigOpacity
   },
 }
