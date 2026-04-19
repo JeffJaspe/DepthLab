@@ -550,6 +550,8 @@ export class ThreeScene {
     this.animParams = params
     if (this.meshGroup) {
       this.animController.setPreset(id, params)
+      // Reset scale immediately so outgoing pulse/scale animations don't leave residual state
+      this.meshGroup.scale.setScalar(this.userScale)
     }
   }
 
@@ -647,10 +649,8 @@ export class ThreeScene {
         this.baseRot.z + orz + this.hoverTilt.y  + anim.rotOffset.z
       )
 
-      // Pulse / scale-affecting presets override user scale
-      if (Math.abs(anim.scaleMult - 1) > 0.001) {
-        this.meshGroup.scale.setScalar(this.userScale * anim.scaleMult)
-      }
+      // Always apply final scale so switching away from pulse resets it correctly
+      this.meshGroup.scale.setScalar(this.userScale * anim.scaleMult)
 
       // ── Fire: flickering warm point light
       if (this.effects.fire.enabled) {
