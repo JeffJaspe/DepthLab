@@ -135,23 +135,6 @@ export function createSolidFromImage(
   const halfW = width / 2
   const halfH = height / 2
 
-  // UV generator: cap faces map world XY → [0,1] texture space
-  const uvGenerator = {
-    generateTopUV(_: unknown, v: number[], a: number, b: number, c: number) {
-      return [
-        new THREE.Vector2((v[a * 3]     + halfW) / width,  (v[a * 3 + 1] + halfH) / height),
-        new THREE.Vector2((v[b * 3]     + halfW) / width,  (v[b * 3 + 1] + halfH) / height),
-        new THREE.Vector2((v[c * 3]     + halfW) / width,  (v[c * 3 + 1] + halfH) / height),
-      ]
-    },
-    generateSideWallUV(_: unknown, _v: number[], _a: number, _b: number, _c: number, _d: number) {
-      return [
-        new THREE.Vector2(0, 0), new THREE.Vector2(1, 0),
-        new THREE.Vector2(1, 1), new THREE.Vector2(0, 1),
-      ]
-    }
-  }
-
   // Build Three.js Shape from the world-space silhouette path
   const shape = new THREE.Shape()
   shape.moveTo(worldPath[0][0], worldPath[0][1])
@@ -162,9 +145,21 @@ export function createSolidFromImage(
     depth,
     bevelEnabled: false,
     steps: 1,
-    uvGenerator
   })
   geo.translate(0, 0, -depth / 2)   // centre extrusion around z=0
+
+  // Manually fix UVs: map world XY → [0,1] texture space for ALL vertices.
+  // ExtrudeGeometry's uvGenerator API is unreliable in r169; post-construction
+  // override is the only guaranteed approach.
+  const posAttr = geo.attributes.position as THREE.BufferAttribute
+  const uvAttr  = geo.attributes.uv       as THREE.BufferAttribute
+  for (let i = 0; i < posAttr.count; i++) {
+    uvAttr.setXY(i,
+      (posAttr.getX(i) + halfW) / width,
+      (posAttr.getY(i) + halfH) / height
+    )
+  }
+  uvAttr.needsUpdate = true
 
   // Side walls: dark, flat colour — the depth band
   const sideMat = new THREE.MeshStandardMaterial({
