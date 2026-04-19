@@ -1,5 +1,9 @@
 import * as THREE from 'three'
-import { createSolidFromImage, MAT_FRONT } from './geometry/createSolidMesh'
+import {
+  createSolidFromImage, MAT_FRONT,
+  buildSilhouetteEdges, disposeSilhouetteEdges,
+  type SilhouetteEdges
+} from './geometry/createSolidMesh'
 
 export interface MaterialParams {
   metalness?: number
@@ -50,6 +54,8 @@ export class ThreeScene {
   private textureAspect: number = 1
   private currentThickness: number = 0
   private hasLoaded: boolean = false
+  // Silhouette edges cached per image load — reused across thickness rebuilds
+  private silhouetteEdges: SilhouetteEdges | null = null
 
   // Default cube (empty state)
   private defaultCube: THREE.Mesh | null = null
@@ -200,8 +206,15 @@ export class ThreeScene {
         texture.magFilter = THREE.LinearFilter
         texture.generateMipmaps = true
 
+        // Dispose previous image resources
+        this.currentTexture?.dispose()
+        if (this.silhouetteEdges) { disposeSilhouetteEdges(this.silhouetteEdges); this.silhouetteEdges = null }
+
         this.currentTexture = texture
         this.textureAspect = texture.image.width / texture.image.height
+
+        // Scan silhouette once — reused for all subsequent thickness rebuilds
+        this.silhouetteEdges = buildSilhouetteEdges(texture)
 
         if (this.defaultCube) {
           this.scene.remove(this.defaultCube)
@@ -243,8 +256,11 @@ export class ThreeScene {
       this.mainMesh.castShadow    = true
       this.mainMesh.receiveShadow = true
     } else {
-      // Solid BoxGeometry: proper front/back/side faces, alpha-clipped to PNG silhouette
-      this.mainMesh = createSolidFromImage(this.currentTexture, w, h, d, this.matParams)
+      // Solid BoxGeometry with cached silhouette edges — no pixel re-scan on slider drag
+      this.mainMesh = createSolidFromImage(
+        this.currentTexture, w, h, d, this.matParams,
+        this.silhouetteEdges ?? undefined
+      )
     }
 
     this.meshGroup.add(this.mainMesh)
@@ -490,13 +506,9 @@ export class ThreeScene {
       if (child instanceof THREE.Mesh) {
         child.geometry.dispose()
         const mats = Array.isArray(child.material) ? child.material : [child.material]
-        mats.forEach((m: THREE.Material) => {
-          // Only dispose CanvasTextures (edge maps created per-build).
-          // currentTexture (the uploaded image) is managed separately in dispose().
-          const map = (m as THREE.MeshStandardMaterial).map
-          if (map && map !== this.currentTexture) map.dispose()
-          m.dispose()
-        })
+        // Dispose material objects only — textures (currentTexture + silhouetteEdges)
+        // are managed explicitly in loadTexture() and dispose().
+        mats.forEach((m: THREE.Material) => m.dispose())
       }
     })
   }
@@ -506,6 +518,7 @@ export class ThreeScene {
     cancelAnimationFrame(this.animationId)
     if (this.meshGroup) { this.scene.remove(this.meshGroup); this.disposeMeshGroup() }
     this.currentTexture?.dispose()
+    if (this.silhouetteEdges) { disposeSilhouetteEdges(this.silhouetteEdges); this.silhouetteEdges = null }
     if (this.defaultCube) { this.scene.remove(this.defaultCube); this.defaultCube.geometry.dispose() }
     this.renderer.dispose()
   }

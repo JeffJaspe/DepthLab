@@ -9,7 +9,7 @@ export interface SolidMeshParams {
   reflectivity?: number
 }
 
-// BoxGeometry material slot indices (Three.js order: right, left, top, bottom, front, back)
+// BoxGeometry material slot indices
 export const MAT_RIGHT  = 0
 export const MAT_LEFT   = 1
 export const MAT_TOP    = 2
@@ -17,57 +17,125 @@ export const MAT_BOTTOM = 3
 export const MAT_FRONT  = 4
 export const MAT_BACK   = 5
 
-/**
- * Sample a thin strip from each edge of the source image and return CanvasTextures.
- * Each side texture is 1 px in the "depth" direction and full-resolution in the other,
- * so Three.js stretches it across the side face — reproducing edge colors and alpha.
- */
-function buildEdgeTextures(texture: THREE.Texture): {
-  right: THREE.CanvasTexture
-  left:  THREE.CanvasTexture
-  top:   THREE.CanvasTexture
+export interface SilhouetteEdges {
+  right:  THREE.CanvasTexture
+  left:   THREE.CanvasTexture
+  top:    THREE.CanvasTexture
   bottom: THREE.CanvasTexture
-} {
+}
+
+const ALPHA_THRESHOLD = 25 // alpha > ~10% = visible pixel
+
+/**
+ * Scan every row/column of the source image and find the outermost OPAQUE
+ * pixel of the actual object silhouette (not the image bounding box).
+ *
+ * Returns four 1-pixel-strip CanvasTextures:
+ *   right/left → 1 × H  (one pixel per row)
+ *   top/bottom → W × 1  (one pixel per column)
+ *
+ * Each pixel is either the object's edge colour at full alpha (255) or
+ * transparent (0).  Side-face materials use alphaTest 0.5 so they are
+ * clipped exactly to the object silhouette — never the full rectangle.
+ *
+ * Call this ONCE per image load and cache the result; it is O(W×H) so
+ * rebuilding on every thickness-slider tick would be wasteful.
+ */
+export function buildSilhouetteEdges(texture: THREE.Texture): SilhouetteEdges {
   const img = texture.image as HTMLImageElement | HTMLCanvasElement
   const W = img.width
   const H = img.height
-
-  // Sample a small % of the smaller dimension so we average anti-aliased fringe pixels
-  const px = Math.max(2, Math.round(Math.min(W, H) * 0.015))
 
   const src = document.createElement('canvas')
   src.width = W
   src.height = H
   src.getContext('2d')!.drawImage(img, 0, 0)
+  const px = src.getContext('2d')!.getImageData(0, 0, W, H).data
 
-  const slice = (sx: number, sy: number, sw: number, sh: number, ow: number, oh: number): THREE.CanvasTexture => {
+  const rightD  = new Uint8ClampedArray(H * 4)
+  const leftD   = new Uint8ClampedArray(H * 4)
+  const topD    = new Uint8ClampedArray(W * 4)
+  const bottomD = new Uint8ClampedArray(W * 4)
+
+  // right: rightmost opaque pixel per row
+  for (let y = 0; y < H; y++) {
+    for (let x = W - 1; x >= 0; x--) {
+      const i = (y * W + x) * 4
+      if (px[i + 3] > ALPHA_THRESHOLD) {
+        rightD[y * 4] = px[i]; rightD[y * 4 + 1] = px[i + 1]
+        rightD[y * 4 + 2] = px[i + 2]; rightD[y * 4 + 3] = 255
+        break
+      }
+    }
+  }
+
+  // left: leftmost opaque pixel per row
+  for (let y = 0; y < H; y++) {
+    for (let x = 0; x < W; x++) {
+      const i = (y * W + x) * 4
+      if (px[i + 3] > ALPHA_THRESHOLD) {
+        leftD[y * 4] = px[i]; leftD[y * 4 + 1] = px[i + 1]
+        leftD[y * 4 + 2] = px[i + 2]; leftD[y * 4 + 3] = 255
+        break
+      }
+    }
+  }
+
+  // top: topmost opaque pixel per column
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < H; y++) {
+      const i = (y * W + x) * 4
+      if (px[i + 3] > ALPHA_THRESHOLD) {
+        topD[x * 4] = px[i]; topD[x * 4 + 1] = px[i + 1]
+        topD[x * 4 + 2] = px[i + 2]; topD[x * 4 + 3] = 255
+        break
+      }
+    }
+  }
+
+  // bottom: bottommost opaque pixel per column
+  for (let x = 0; x < W; x++) {
+    for (let y = H - 1; y >= 0; y--) {
+      const i = (y * W + x) * 4
+      if (px[i + 3] > ALPHA_THRESHOLD) {
+        bottomD[x * 4] = px[i]; bottomD[x * 4 + 1] = px[i + 1]
+        bottomD[x * 4 + 2] = px[i + 2]; bottomD[x * 4 + 3] = 255
+        break
+      }
+    }
+  }
+
+  const mkTex = (data: Uint8ClampedArray, w: number, h: number): THREE.CanvasTexture => {
     const c = document.createElement('canvas')
-    c.width  = ow
-    c.height = oh
-    c.getContext('2d')!.drawImage(src, sx, sy, sw, sh, 0, 0, ow, oh)
+    c.width = w; c.height = h
+    c.getContext('2d')!.putImageData(new ImageData(data, w, h), 0, 0)
     const t = new THREE.CanvasTexture(c)
     t.needsUpdate = true
     return t
   }
 
   return {
-    right:  slice(W - px, 0,      px, H,  1, H),
-    left:   slice(0,      0,      px, H,  1, H),
-    top:    slice(0,      0,      W,  px, W, 1),
-    bottom: slice(0,      H - px, W,  px, W, 1)
+    right:  mkTex(rightD,  1, H),
+    left:   mkTex(leftD,   1, H),
+    top:    mkTex(topD,    W, 1),
+    bottom: mkTex(bottomD, W, 1)
   }
+}
+
+export function disposeSilhouetteEdges(e: SilhouetteEdges): void {
+  e.right.dispose(); e.left.dispose(); e.top.dispose(); e.bottom.dispose()
 }
 
 function makeSideMat(edgeTex: THREE.CanvasTexture): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({
     map: edgeTex,
-    // Multiply edge color by a very dark tone so sides are clearly darker than
-    // the front face — this contrast is what makes depth readable at any angle.
-    color: new THREE.Color(0x181820),
-    alphaTest: 0.1,
+    // Darken edge colours — the dark band at the silhouette is what makes
+    // the depth visible, especially from a slight angle.
+    color: new THREE.Color(0x1c1c28),
+    alphaTest: 0.5,  // firm cut: edge pixels are 0 or 255, no in-between
     transparent: true,
-    roughness: 0.95,
-    metalness: 0.0
+    roughness: 0.9,
+    metalness: 0.05
   })
 }
 
@@ -90,36 +158,33 @@ export function makeFrontMat(
 }
 
 /**
- * Build a BoxGeometry mesh that looks like a solid extruded object:
- *  - front  (+z face) : full texture, all material params applied
- *  - back   (-z face) : same texture darkened (depth = back of product)
- *  - sides (4 faces)  : edge pixel columns/rows from the texture, alpha-clipped
+ * Build a BoxGeometry mesh with:
+ *   front  (+z): full texture + material params
+ *   back   (-z): same texture, darkened
+ *   sides  (4) : silhouette-edge colours, alpha-clipped to object shape
  *
- * Caller is responsible for disposing the returned mesh's geometry and materials,
- * including the CanvasTextures stored in each side material's .map.
+ * Pass pre-built `edges` (from buildSilhouetteEdges) to avoid re-scanning
+ * pixels on every thickness change.  If omitted, edges are built inline.
  *
- * Material layout follows BoxGeometry convention:
- *   [0] right(+x)  [1] left(-x)  [2] top(+y)  [3] bottom(-y)
- *   [4] front(+z)  [5] back(-z)
+ * Material layout: [right(0), left(1), top(2), bottom(3), front(4), back(5)]
  */
 export function createSolidFromImage(
   texture: THREE.Texture,
   width: number,
   height: number,
   depth: number,
-  params: SolidMeshParams = {}
+  params: SolidMeshParams = {},
+  edges?: SilhouetteEdges
 ): THREE.Mesh {
   const geo = new THREE.BoxGeometry(width, height, depth)
-  const edges = buildEdgeTextures(texture)
+  const e = edges ?? buildSilhouetteEdges(texture)
 
   const materials: THREE.Material[] = [
-    makeSideMat(edges.right),   // 0 right  (+x)
-    makeSideMat(edges.left),    // 1 left   (-x)
-    makeSideMat(edges.top),     // 2 top    (+y)
-    makeSideMat(edges.bottom),  // 3 bottom (-y)
-    makeFrontMat(texture, params), // 4 front (+z)
-    // Back face: BoxGeometry -z face normals point outward (-z), so FrontSide
-    // is correct here — it renders when the camera is on the -z side (behind object).
+    makeSideMat(e.right),
+    makeSideMat(e.left),
+    makeSideMat(e.top),
+    makeSideMat(e.bottom),
+    makeFrontMat(texture, params),
     new THREE.MeshStandardMaterial({
       map: texture,
       alphaTest: 0.05,
