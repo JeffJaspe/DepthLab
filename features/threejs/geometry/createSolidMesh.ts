@@ -161,15 +161,21 @@ export function createSolidFromImage(
   }
   uvAttr.needsUpdate = true
 
-  // Side walls: dark, flat colour — the depth band
-  const sideMat = new THREE.MeshStandardMaterial({
-    color:    new THREE.Color(0x1c1c28),
-    roughness: 0.9,
-    metalness: 0.05
+  // Side walls: match front material properties so presets stay coherent
+  const sideMat = new THREE.MeshPhysicalMaterial({
+    color:       new THREE.Color(params.colorTint ?? '#ffffff'),
+    metalness:   params.metalness   ?? 0.1,
+    roughness:   Math.min(1, (params.roughness ?? 0.7) + 0.15),
+    reflectivity: params.reflectivity ?? 0,
+    clearcoat:   (params.reflectivity ?? 0) * 0.5,
+    opacity:     params.opacity ?? 1,
+    transparent: (params.opacity ?? 1) < 1,
   })
 
-  // Cap faces: the actual image, DoubleSide so both front and back render
+  // Cap faces: FrontSide only — ExtrudeGeometry gives each cap correct outward normals,
+  // so DoubleSide is not needed and causes the hollow-inside artifact.
   const capMat = makeFrontMat(texture, params)
+  capMat.side = THREE.FrontSide
 
   const mesh = new THREE.Mesh(geo, [capMat, sideMat])
   mesh.castShadow = mesh.receiveShadow = true

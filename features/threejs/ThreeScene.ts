@@ -1,5 +1,5 @@
 import * as THREE from 'three'
-import { createSolidFromImage, MAT_FRONT, traceSilhouettePath } from './geometry/createSolidMesh'
+import { createSolidFromImage, MAT_FRONT, MAT_SIDES, traceSilhouettePath } from './geometry/createSolidMesh'
 
 export interface MaterialParams {
   metalness?: number
@@ -116,13 +116,13 @@ export class ThreeScene {
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.0
+    this.renderer.toneMappingExposure = 1.2
 
     this.scene.background = new THREE.Color(0x0A0A0F)
     this.scene.fog = new THREE.FogExp2(0x0A0A0F, 0.02) // lighter fog — don't obscure depth
 
-    // ── Ambient: keep low so directional light creates real contrast
-    this.ambientLight.intensity = 0.35
+    // ── Ambient: high enough that metallic presets don't go pitch-black without envMap
+    this.ambientLight.intensity = 0.6
     this.scene.add(this.ambientLight)
 
     // ── Main key light: angled from upper-left-front so it lights the front face
@@ -148,7 +148,7 @@ export class ThreeScene {
     fillLight.position.set(-3, -2, -4)
     this.scene.add(fillLight)
 
-    this.scene.add(new THREE.HemisphereLight(0x6C63FF, 0x0A0A0F, 0.15))
+    this.scene.add(new THREE.HemisphereLight(0x6C63FF, 0x0A0A0F, 0.3))
 
     // ── Effect lights (start off)
     this.fireLight.position.set(0, 1.2, 1)
@@ -296,19 +296,37 @@ export class ThreeScene {
     return mats as THREE.MeshPhysicalMaterial
   }
 
+  private getSideMat(): THREE.MeshPhysicalMaterial | null {
+    if (!this.mainMesh) return null
+    const mats = this.mainMesh.material
+    if (Array.isArray(mats)) return mats[MAT_SIDES] as THREE.MeshPhysicalMaterial
+    return null
+  }
+
   private applyMaterialParamsToMesh(p: MaterialParams): void {
     const mat = this.getFrontMat()
-    if (!mat) return
-    if (p.metalness   !== undefined) mat.metalness   = p.metalness
-    if (p.roughness   !== undefined) mat.roughness   = p.roughness
-    if (p.opacity     !== undefined) { mat.opacity = p.opacity; mat.transparent = true }
-    if (p.wireframe   !== undefined) mat.wireframe   = p.wireframe
-    if (p.colorTint   !== undefined) mat.color       = new THREE.Color(p.colorTint)
-    if (p.reflectivity !== undefined) {
-      mat.reflectivity = p.reflectivity
-      mat.clearcoat    = p.reflectivity * 0.5
+    if (mat) {
+      if (p.metalness   !== undefined) mat.metalness   = p.metalness
+      if (p.roughness   !== undefined) mat.roughness   = p.roughness
+      if (p.opacity     !== undefined) { mat.opacity = p.opacity; mat.transparent = true }
+      if (p.wireframe   !== undefined) mat.wireframe   = p.wireframe
+      if (p.colorTint   !== undefined) mat.color       = new THREE.Color(p.colorTint)
+      if (p.reflectivity !== undefined) {
+        mat.reflectivity = p.reflectivity
+        mat.clearcoat    = p.reflectivity * 0.5
+      }
+      mat.needsUpdate = true
     }
-    mat.needsUpdate = true
+
+    const side = this.getSideMat()
+    if (side) {
+      if (p.colorTint    !== undefined) side.color        = new THREE.Color(p.colorTint)
+      if (p.metalness    !== undefined) side.metalness    = p.metalness
+      if (p.roughness    !== undefined) side.roughness    = Math.min(1, p.roughness + 0.15)
+      if (p.opacity      !== undefined) { side.opacity = p.opacity; side.transparent = p.opacity < 1 }
+      if (p.reflectivity !== undefined) { side.reflectivity = p.reflectivity; side.clearcoat = p.reflectivity * 0.5 }
+      side.needsUpdate = true
+    }
   }
 
   updateMaterial(p: MaterialParams): void {
