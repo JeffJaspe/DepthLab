@@ -53,7 +53,6 @@ export const explodePreset: AnimationPreset = {
     })
 
     const points = new THREE.Points(ptsGeo, ptsMat)
-    target.mainMesh.visible = false
     target.meshGroup.add(points)
 
     const ud = target.mainMesh.userData
@@ -113,7 +112,6 @@ export const explodePreset: AnimationPreset = {
       ;(points.material as THREE.Material).dispose()
       points.geometry.dispose()
     }
-    if (target.mainMesh) target.mainMesh.visible = true
     delete ud._explodePoints; delete ud._explodeVels
     delete ud._explodeOrig;   delete ud._explodeProg; delete ud._explodeDir
   },
