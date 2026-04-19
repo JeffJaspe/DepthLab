@@ -10,18 +10,15 @@ export const explodePreset: AnimationPreset = {
     const origGeo = target.mainMesh.geometry as THREE.BufferGeometry
 
     // Non-indexed so every triangle owns its vertices and can move independently
-    const geo  = origGeo.toNonIndexed()
-    const posA = geo.attributes.position as THREE.BufferAttribute
+    const geo      = origGeo.toNonIndexed()
+    const posA     = geo.attributes.position as THREE.BufferAttribute
     const triCount = Math.floor(posA.count / 3)
 
     const orig      = new Float32Array(posA.array as Float32Array)
-    // Per-triangle: pure radial direction and pure random direction stored separately
-    // so chunkSize + scatter can be blended live in update() without re-init.
     const triRadial = new Float32Array(triCount * 3)
     const triRandom = new Float32Array(triCount * 3)
 
     for (let tri = 0; tri < triCount; tri++) {
-      // Triangle centroid
       let cx = 0, cy = 0, cz = 0
       for (let v = 0; v < 3; v++) {
         const j = (tri * 3 + v) * 3
@@ -30,12 +27,10 @@ export const explodePreset: AnimationPreset = {
       cx /= 3; cy /= 3; cz /= 3
       const len = Math.sqrt(cx * cx + cy * cy + cz * cz) || 1
 
-      // Radial component: straight outward from mesh centre
       triRadial[tri * 3]     = cx / len
       triRadial[tri * 3 + 1] = cy / len
       triRadial[tri * 3 + 2] = 0.4
 
-      // Random component: chaotic scatter
       triRandom[tri * 3]     = (Math.random() - 0.5) * 2.4
       triRandom[tri * 3 + 1] = (Math.random() - 0.5) * 2.4 + 0.2
       triRandom[tri * 3 + 2] = Math.random() * 2.2 + 0.3
@@ -43,14 +38,22 @@ export const explodePreset: AnimationPreset = {
 
     target.mainMesh.geometry = geo
 
+    // Hide sibling meshes (outline) — they share origGeo and would show the
+    // original shape underneath the explosion, making it look like nothing changed.
+    const siblings     = target.meshGroup.children.filter(c => c !== target.mainMesh)
+    const siblingVis   = siblings.map(c => c.visible)
+    siblings.forEach(c => { c.visible = false })
+
     const ud = target.mainMesh.userData
-    ud._explodeOrigGeo  = origGeo
-    ud._explodeOrig     = orig
-    ud._explodeRadial   = triRadial
-    ud._explodeRandom   = triRandom
-    ud._explodeTriCount = triCount
-    ud._explodeProg     = 0
-    ud._explodeDir      = 1
+    ud._explodeOrigGeo    = origGeo
+    ud._explodeOrig       = orig
+    ud._explodeRadial     = triRadial
+    ud._explodeRandom     = triRandom
+    ud._explodeTriCount   = triCount
+    ud._explodeProg       = 0
+    ud._explodeDir        = 1
+    ud._explodeSiblings   = siblings
+    ud._explodeSiblingVis = siblingVis
   },
 
   update(target, params, delta): AnimationOutput {
@@ -83,7 +86,6 @@ export const explodePreset: AnimationPreset = {
                         .attributes.position as THREE.BufferAttribute
 
     for (let tri = 0; tri < triCount; tri++) {
-      // All tris in the same chunk share the leader's blended velocity
       const leader = Math.floor(tri / chunkSize) * chunkSize
       const l = leader * 3
       const vx = triRadial[l]     * radial + triRandom[l]     * scatter
@@ -109,14 +111,24 @@ export const explodePreset: AnimationPreset = {
     if (!target.mainMesh) return
     const ud = target.mainMesh.userData
 
+    // Restore siblings visibility before geometry swap
+    const siblings   = ud._explodeSiblings   as THREE.Object3D[] | undefined
+    const siblingVis = ud._explodeSiblingVis as boolean[]        | undefined
+    if (siblings && siblingVis) {
+      siblings.forEach((c, i) => { c.visible = siblingVis[i] })
+    }
+
     const origGeo = ud._explodeOrigGeo as THREE.BufferGeometry | undefined
     if (origGeo) {
       target.mainMesh.geometry.dispose()
       target.mainMesh.geometry = origGeo
+      // Force Three.js to re-upload the buffer so the restored shape renders immediately
+      ;(origGeo.attributes.position as THREE.BufferAttribute).needsUpdate = true
     }
 
-    delete ud._explodeOrigGeo;  delete ud._explodeOrig
-    delete ud._explodeRadial;   delete ud._explodeRandom
-    delete ud._explodeTriCount; delete ud._explodeProg; delete ud._explodeDir
+    delete ud._explodeOrigGeo;    delete ud._explodeOrig
+    delete ud._explodeRadial;     delete ud._explodeRandom
+    delete ud._explodeTriCount;   delete ud._explodeProg;  delete ud._explodeDir
+    delete ud._explodeSiblings;   delete ud._explodeSiblingVis
   },
 }
