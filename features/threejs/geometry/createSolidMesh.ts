@@ -9,134 +9,68 @@ export interface SolidMeshParams {
   reflectivity?: number
 }
 
-// BoxGeometry material slot indices
-export const MAT_RIGHT  = 0
-export const MAT_LEFT   = 1
-export const MAT_TOP    = 2
-export const MAT_BOTTOM = 3
-export const MAT_FRONT  = 4
-export const MAT_BACK   = 5
+// ExtrudeGeometry material groups: 0 = side walls, 1 = front + back caps
+export const MAT_SIDES = 0
+export const MAT_FRONT = 1   // getFrontMat() targets this group
 
-export interface SilhouetteEdges {
-  right:  THREE.CanvasTexture
-  left:   THREE.CanvasTexture
-  top:    THREE.CanvasTexture
-  bottom: THREE.CanvasTexture
-}
-
-const ALPHA_THRESHOLD = 25 // alpha > ~10% = visible pixel
+const ALPHA_THRESHOLD = 25   // alpha > ~10% = opaque
 
 /**
- * Scan every row/column of the source image and find the outermost OPAQUE
- * pixel of the actual object silhouette (not the image bounding box).
+ * Scan the source image and return the object's left/right silhouette boundary
+ * as a closed polygon in normalised [0,1] image coordinates.
  *
- * Returns four 1-pixel-strip CanvasTextures:
- *   right/left → 1 × H  (one pixel per row)
- *   top/bottom → W × 1  (one pixel per column)
+ * Strategy: for each sample row find the leftmost and rightmost opaque pixel of
+ * the actual object — NOT the image bounding box.  The polygon is:
+ *   right edge (top→bottom) + left edge reversed (bottom→top)
  *
- * Each pixel is either the object's edge colour at full alpha (255) or
- * transparent (0).  Side-face materials use alphaTest 0.5 so they are
- * clipped exactly to the object silhouette — never the full rectangle.
- *
- * Call this ONCE per image load and cache the result; it is O(W×H) so
- * rebuilding on every thickness-slider tick would be wasteful.
+ * This is O(W×H) and should be called once per image load, then cached.
  */
-export function buildSilhouetteEdges(texture: THREE.Texture): SilhouetteEdges {
+export function traceSilhouettePath(texture: THREE.Texture): Array<[number, number]> | null {
   const img = texture.image as HTMLImageElement | HTMLCanvasElement
   const W = img.width
   const H = img.height
+  if (!W || !H) return null
 
-  const src = document.createElement('canvas')
-  src.width = W
-  src.height = H
-  src.getContext('2d')!.drawImage(img, 0, 0)
-  const px = src.getContext('2d')!.getImageData(0, 0, W, H).data
+  const cvs = document.createElement('canvas')
+  cvs.width = W; cvs.height = H
+  cvs.getContext('2d')!.drawImage(img, 0, 0)
+  const px = cvs.getContext('2d')!.getImageData(0, 0, W, H).data
 
-  const rightD  = new Uint8ClampedArray(H * 4)
-  const leftD   = new Uint8ClampedArray(H * 4)
-  const topD    = new Uint8ClampedArray(W * 4)
-  const bottomD = new Uint8ClampedArray(W * 4)
+  // ~200 samples per side — fine enough for most product images
+  const step = Math.max(1, Math.floor(H / 200))
 
-  // right: rightmost opaque pixel per row
-  for (let y = 0; y < H; y++) {
+  const right: Array<[number, number]> = []
+  const left:  Array<[number, number]> = []
+
+  for (let y = 0; y < H; y += step) {
+    let xR = -1, xL = -1
     for (let x = W - 1; x >= 0; x--) {
-      const i = (y * W + x) * 4
-      if (px[i + 3] > ALPHA_THRESHOLD) {
-        rightD[y * 4] = px[i]; rightD[y * 4 + 1] = px[i + 1]
-        rightD[y * 4 + 2] = px[i + 2]; rightD[y * 4 + 3] = 255
-        break
-      }
+      if (px[(y * W + x) * 4 + 3] > ALPHA_THRESHOLD) { xR = x; break }
     }
-  }
-
-  // left: leftmost opaque pixel per row
-  for (let y = 0; y < H; y++) {
     for (let x = 0; x < W; x++) {
-      const i = (y * W + x) * 4
-      if (px[i + 3] > ALPHA_THRESHOLD) {
-        leftD[y * 4] = px[i]; leftD[y * 4 + 1] = px[i + 1]
-        leftD[y * 4 + 2] = px[i + 2]; leftD[y * 4 + 3] = 255
-        break
-      }
+      if (px[(y * W + x) * 4 + 3] > ALPHA_THRESHOLD) { xL = x; break }
     }
+    if (xR < 0) continue           // fully transparent row — skip
+    right.push([xR / (W - 1), y / (H - 1)])
+    left.push( [xL / (W - 1), y / (H - 1)])
   }
 
-  // top: topmost opaque pixel per column
-  for (let x = 0; x < W; x++) {
-    for (let y = 0; y < H; y++) {
-      const i = (y * W + x) * 4
-      if (px[i + 3] > ALPHA_THRESHOLD) {
-        topD[x * 4] = px[i]; topD[x * 4 + 1] = px[i + 1]
-        topD[x * 4 + 2] = px[i + 2]; topD[x * 4 + 3] = 255
-        break
-      }
-    }
-  }
+  if (right.length < 3) return null   // no visible object
 
-  // bottom: bottommost opaque pixel per column
-  for (let x = 0; x < W; x++) {
-    for (let y = H - 1; y >= 0; y--) {
-      const i = (y * W + x) * 4
-      if (px[i + 3] > ALPHA_THRESHOLD) {
-        bottomD[x * 4] = px[i]; bottomD[x * 4 + 1] = px[i + 1]
-        bottomD[x * 4 + 2] = px[i + 2]; bottomD[x * 4 + 3] = 255
-        break
-      }
-    }
-  }
-
-  const mkTex = (data: Uint8ClampedArray, w: number, h: number): THREE.CanvasTexture => {
-    const c = document.createElement('canvas')
-    c.width = w; c.height = h
-    c.getContext('2d')!.putImageData(new ImageData(data, w, h), 0, 0)
-    const t = new THREE.CanvasTexture(c)
-    t.needsUpdate = true
-    return t
-  }
-
-  return {
-    right:  mkTex(rightD,  1, H),
-    left:   mkTex(leftD,   1, H),
-    top:    mkTex(topD,    W, 1),
-    bottom: mkTex(bottomD, W, 1)
-  }
+  // Closed polygon: right edge (top→bottom), then left edge reversed (bottom→top)
+  return [...right, ...[...left].reverse()]
 }
 
-export function disposeSilhouetteEdges(e: SilhouetteEdges): void {
-  e.right.dispose(); e.left.dispose(); e.top.dispose(); e.bottom.dispose()
-}
-
-function makeSideMat(edgeTex: THREE.CanvasTexture): THREE.MeshStandardMaterial {
-  return new THREE.MeshStandardMaterial({
-    map: edgeTex,
-    // Darken edge colours — the dark band at the silhouette is what makes
-    // the depth visible, especially from a slight angle.
-    color: new THREE.Color(0x1c1c28),
-    alphaTest: 0.5,  // firm cut: edge pixels are 0 or 255, no in-between
-    transparent: true,
-    roughness: 0.9,
-    metalness: 0.05
-  })
+/** Convert normalised image [0,1]×[0,1] coords to Three.js world space. */
+function toWorld(
+  path: Array<[number, number]>,
+  width: number,
+  height: number
+): Array<[number, number]> {
+  return path.map(([u, v]) => [
+    u * width  - width  / 2,    // x:  0→1  →  -w/2→+w/2
+    -(v * height - height / 2)  // y: flip  →  +h/2→-h/2  (image top = Three.js top)
+  ])
 }
 
 export function makeFrontMat(
@@ -145,28 +79,44 @@ export function makeFrontMat(
 ): THREE.MeshPhysicalMaterial {
   return new THREE.MeshPhysicalMaterial({
     map: texture,
-    metalness: p.metalness ?? 0.1,
-    roughness: p.roughness ?? 0.7,
+    metalness:   p.metalness   ?? 0.1,
+    roughness:   p.roughness   ?? 0.7,
     transparent: true,
-    alphaTest: 0.05,
-    opacity: p.opacity ?? 1,
-    side: THREE.FrontSide,
-    color: new THREE.Color(p.colorTint ?? '#ffffff'),
+    alphaTest:   0.05,
+    opacity:     p.opacity     ?? 1,
+    side:        THREE.DoubleSide,
+    color:       new THREE.Color(p.colorTint ?? '#ffffff'),
     reflectivity: p.reflectivity ?? 0,
-    clearcoat: (p.reflectivity ?? 0) * 0.5
+    clearcoat:   (p.reflectivity ?? 0) * 0.5
   })
 }
 
+function makeFlatFallback(
+  texture: THREE.Texture,
+  width: number,
+  height: number,
+  params: SolidMeshParams
+): THREE.Mesh {
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(width, height),
+    makeFrontMat(texture, params)
+  )
+  mesh.castShadow = mesh.receiveShadow = true
+  return mesh
+}
+
 /**
- * Build a BoxGeometry mesh with:
- *   front  (+z): full texture + material params
- *   back   (-z): same texture, darkened
- *   sides  (4) : silhouette-edge colours, alpha-clipped to object shape
+ * Build an extruded mesh whose shape follows the object's alpha silhouette:
  *
- * Pass pre-built `edges` (from buildSilhouetteEdges) to avoid re-scanning
- * pixels on every thickness change.  If omitted, edges are built inline.
+ *  group 0 — side walls : solid dark material, no texture
+ *  group 1 — cap faces  : full texture + alphaTest, DoubleSide
+ *              (front cap is lit; back cap is naturally dark via lighting)
  *
- * Material layout: [right(0), left(1), top(2), bottom(3), front(4), back(5)]
+ * The custom uvGenerator maps cap faces from world XY → [0,1] texture UV so
+ * the image aligns correctly regardless of where the object sits in the frame.
+ *
+ * Pass pre-traced `cachedPath` (from traceSilhouettePath) to skip the pixel
+ * scan on every thickness-slider rebuild.
  */
 export function createSolidFromImage(
   texture: THREE.Texture,
@@ -174,28 +124,59 @@ export function createSolidFromImage(
   height: number,
   depth: number,
   params: SolidMeshParams = {},
-  edges?: SilhouetteEdges
+  cachedPath?: Array<[number, number]> | null
 ): THREE.Mesh {
-  const geo = new THREE.BoxGeometry(width, height, depth)
-  const e = edges ?? buildSilhouetteEdges(texture)
+  const normPath = cachedPath ?? traceSilhouettePath(texture)
+  if (!normPath || normPath.length < 6) {
+    return makeFlatFallback(texture, width, height, params)
+  }
 
-  const materials: THREE.Material[] = [
-    makeSideMat(e.right),
-    makeSideMat(e.left),
-    makeSideMat(e.top),
-    makeSideMat(e.bottom),
-    makeFrontMat(texture, params),
-    new THREE.MeshStandardMaterial({
-      map: texture,
-      alphaTest: 0.05,
-      transparent: true,
-      color: new THREE.Color(0x1a1a24),
-      roughness: 0.9
-    })
-  ]
+  const worldPath = toWorld(normPath, width, height)
+  const halfW = width / 2
+  const halfH = height / 2
 
-  const mesh = new THREE.Mesh(geo, materials)
-  mesh.castShadow    = true
-  mesh.receiveShadow = true
+  // UV generator: cap faces map world XY → [0,1] texture space
+  const uvGenerator = {
+    generateTopUV(_: unknown, v: number[], a: number, b: number, c: number) {
+      return [
+        new THREE.Vector2((v[a * 3]     + halfW) / width,  (v[a * 3 + 1] + halfH) / height),
+        new THREE.Vector2((v[b * 3]     + halfW) / width,  (v[b * 3 + 1] + halfH) / height),
+        new THREE.Vector2((v[c * 3]     + halfW) / width,  (v[c * 3 + 1] + halfH) / height),
+      ]
+    },
+    generateSideWallUV(_: unknown, _v: number[], _a: number, _b: number, _c: number, _d: number) {
+      return [
+        new THREE.Vector2(0, 0), new THREE.Vector2(1, 0),
+        new THREE.Vector2(1, 1), new THREE.Vector2(0, 1),
+      ]
+    }
+  }
+
+  // Build Three.js Shape from the world-space silhouette path
+  const shape = new THREE.Shape()
+  shape.moveTo(worldPath[0][0], worldPath[0][1])
+  for (let i = 1; i < worldPath.length; i++) shape.lineTo(worldPath[i][0], worldPath[i][1])
+  shape.closePath()
+
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth,
+    bevelEnabled: false,
+    steps: 1,
+    uvGenerator
+  })
+  geo.translate(0, 0, -depth / 2)   // centre extrusion around z=0
+
+  // Side walls: dark, flat colour — the depth band
+  const sideMat = new THREE.MeshStandardMaterial({
+    color:    new THREE.Color(0x1c1c28),
+    roughness: 0.9,
+    metalness: 0.05
+  })
+
+  // Cap faces: the actual image, DoubleSide so both front and back render
+  const capMat = makeFrontMat(texture, params)
+
+  const mesh = new THREE.Mesh(geo, [sideMat, capMat])
+  mesh.castShadow = mesh.receiveShadow = true
   return mesh
 }

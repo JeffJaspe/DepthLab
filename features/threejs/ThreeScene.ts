@@ -1,9 +1,5 @@
 import * as THREE from 'three'
-import {
-  createSolidFromImage, MAT_FRONT,
-  buildSilhouetteEdges, disposeSilhouetteEdges,
-  type SilhouetteEdges
-} from './geometry/createSolidMesh'
+import { createSolidFromImage, MAT_FRONT, traceSilhouettePath } from './geometry/createSolidMesh'
 
 export interface MaterialParams {
   metalness?: number
@@ -54,8 +50,8 @@ export class ThreeScene {
   private textureAspect: number = 1
   private currentThickness: number = 0
   private hasLoaded: boolean = false
-  // Silhouette edges cached per image load — reused across thickness rebuilds
-  private silhouetteEdges: SilhouetteEdges | null = null
+  // Silhouette boundary path cached per image load — reused across thickness rebuilds
+  private silhouettePath: Array<[number, number]> | null = null
 
   // Default cube (empty state)
   private defaultCube: THREE.Mesh | null = null
@@ -206,15 +202,14 @@ export class ThreeScene {
         texture.magFilter = THREE.LinearFilter
         texture.generateMipmaps = true
 
-        // Dispose previous image resources
+        // Dispose previous texture; silhouettePath is just an array — no disposal needed
         this.currentTexture?.dispose()
-        if (this.silhouetteEdges) { disposeSilhouetteEdges(this.silhouetteEdges); this.silhouetteEdges = null }
 
         this.currentTexture = texture
         this.textureAspect = texture.image.width / texture.image.height
 
-        // Scan silhouette once — reused for all subsequent thickness rebuilds
-        this.silhouetteEdges = buildSilhouetteEdges(texture)
+        // Trace silhouette once — reused for all subsequent thickness rebuilds
+        this.silhouettePath = traceSilhouettePath(texture)
 
         if (this.defaultCube) {
           this.scene.remove(this.defaultCube)
@@ -256,10 +251,10 @@ export class ThreeScene {
       this.mainMesh.castShadow    = true
       this.mainMesh.receiveShadow = true
     } else {
-      // Solid BoxGeometry with cached silhouette edges — no pixel re-scan on slider drag
+      // ExtrudeGeometry following object silhouette — no pixel re-scan on slider drag
       this.mainMesh = createSolidFromImage(
         this.currentTexture, w, h, d, this.matParams,
-        this.silhouetteEdges ?? undefined
+        this.silhouettePath
       )
     }
 
@@ -518,7 +513,7 @@ export class ThreeScene {
     cancelAnimationFrame(this.animationId)
     if (this.meshGroup) { this.scene.remove(this.meshGroup); this.disposeMeshGroup() }
     this.currentTexture?.dispose()
-    if (this.silhouetteEdges) { disposeSilhouetteEdges(this.silhouetteEdges); this.silhouetteEdges = null }
+    this.silhouettePath = null
     if (this.defaultCube) { this.scene.remove(this.defaultCube); this.defaultCube.geometry.dispose() }
     this.renderer.dispose()
   }
