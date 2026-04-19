@@ -9,9 +9,9 @@ export interface SolidMeshParams {
   reflectivity?: number
 }
 
-// ExtrudeGeometry material groups: 0 = side walls, 1 = front + back caps
-export const MAT_SIDES = 0
-export const MAT_FRONT = 1   // getFrontMat() targets this group
+// ExtrudeGeometry material groups: 0 = front + back caps, 1 = side walls
+export const MAT_FRONT = 0   // getFrontMat() targets this group
+export const MAT_SIDES = 1
 
 const ALPHA_THRESHOLD = 25   // alpha > ~10% = opaque
 
@@ -171,7 +171,7 @@ export function createSolidFromImage(
   // Cap faces: the actual image, DoubleSide so both front and back render
   const capMat = makeFrontMat(texture, params)
 
-  const mesh = new THREE.Mesh(geo, [sideMat, capMat])
+  const mesh = new THREE.Mesh(geo, [capMat, sideMat])
   mesh.castShadow = mesh.receiveShadow = true
   return mesh
 }
